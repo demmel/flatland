@@ -2,7 +2,6 @@ use std::{error::Error, sync::mpsc::TryRecvError};
 
 use enum_ordinalize::Ordinalize;
 use image::{Rgb, RgbImage};
-use palette::{LinSrgb, Srgb};
 use rand::Rng;
 use show_image::{
     create_window,
@@ -75,7 +74,7 @@ impl State {
         for (x, y, p) in img.enumerate_pixels_mut() {
             let t = self
                 .elements
-                .get(x as usize, y as usize)
+                .get(x as isize, y as isize)
                 .expect("Image made from grid should have same size");
             *p = t.color();
         }
@@ -84,23 +83,23 @@ impl State {
     }
 
     fn update(&mut self) {
-        let new = self
-            .elements
-            .windows(3)
-            .map(|w| {
-                let t = w.get(1, 1).unwrap();
+        let new = (0..self.elements.height())
+            .flat_map(|y| (0..self.elements.width()).map(move |x| (x as isize, y as isize)))
+            .map(|(x, y)| {
+                let t = self.elements.get(x, y).unwrap();
                 match t.element {
-                    Element::Air => match w.get(1, 0) {
+                    Element::Air => match self.elements.get(x, y - 1) {
                         Some(e) => e.clone(),
                         None => t.clone(),
                     },
-                    Element::Soil => match w.get(1, 2) {
+                    Element::Soil => match self.elements.get(x, y + 1) {
                         Some(e) => e.clone(),
                         None => t.clone(),
                     },
                 }
             })
             .collect();
+
         self.elements = Grid::from_cells(self.elements.width(), self.elements.height(), new);
     }
 }
@@ -131,8 +130,11 @@ impl<T> Grid<T> {
         }
     }
 
-    fn get(&self, x: usize, y: usize) -> Option<&T> {
-        self.cells.get(x + self.width * y)
+    fn get(&self, x: isize, y: isize) -> Option<&T> {
+        if x < 0 || y < 0 {
+            return None;
+        }
+        self.cells.get(x as usize + self.width * y as usize)
     }
 
     fn height(&self) -> usize {
@@ -141,76 +143,6 @@ impl<T> Grid<T> {
 
     fn width(&self) -> usize {
         self.width
-    }
-
-    fn windows(&self, size: usize) -> impl Iterator<Item = GridWindow<T>> + '_ {
-        GridWindows::new(self, size)
-    }
-}
-
-struct GridWindows<'a, T> {
-    grid: &'a Grid<T>,
-    x: usize,
-    y: usize,
-    size: usize,
-}
-
-impl<'a, T> GridWindows<'a, T> {
-    fn new(grid: &'a Grid<T>, size: usize) -> Self {
-        Self {
-            grid,
-            x: 0,
-            y: 0,
-            size,
-        }
-    }
-}
-
-impl<'a, T> Iterator for GridWindows<'a, T> {
-    type Item = GridWindow<'a, T>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.y as usize >= self.grid.height() {
-            return None;
-        }
-        let w = GridWindow {
-            grid: self.grid,
-            x: self.x,
-            y: self.y,
-            size: self.size,
-        };
-        self.x += 1;
-        if self.x >= self.grid.width() {
-            self.y += 1;
-            self.x = 0;
-        }
-        Some(w)
-    }
-}
-
-#[derive(Debug, Clone)]
-struct GridWindow<'a, T> {
-    grid: &'a Grid<T>,
-    x: usize,
-    y: usize,
-    size: usize,
-}
-
-impl<'a, T> GridWindow<'a, T> {
-    fn get(&self, x: usize, y: usize) -> Option<&T> {
-        let x = if let Some(x) = (self.x + x).checked_sub(self.size / 2) {
-            x
-        } else {
-            return None;
-        };
-
-        let y = if let Some(y) = (self.y + y).checked_sub(self.size / 2) {
-            y
-        } else {
-            return None;
-        };
-
-        self.grid.get(x, y)
     }
 }
 
