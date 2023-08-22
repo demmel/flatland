@@ -1,7 +1,8 @@
 use std::{error::Error, sync::mpsc::TryRecvError};
 
+use enum_ordinalize::Ordinalize;
 use image::{Rgb, RgbImage};
-use palette::Srgb;
+use palette::{LinSrgb, Srgb};
 use rand::Rng;
 use show_image::{
     create_window,
@@ -15,7 +16,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut running = false;
 
     let window = create_window(
-        "Roots",
+        "",
         WindowOptions {
             size: Some([512, 512]),
             ..Default::default()
@@ -58,47 +59,53 @@ impl State {
             elements: Grid::new(512, 512, |_, _| {
                 let mut rng = rand::thread_rng();
                 Tile {
-                    water: rng.gen(),
-                    air: rng.gen(),
-                    mineral: rng.gen(),
-                    organic: rng.gen(),
+                    element: unsafe {
+                        Element::from_ordinal_unsafe(
+                            rng.gen_range(0..Element::variant_count() as i8),
+                        )
+                    },
                 }
             }),
         }
     }
 
     fn to_image(&self) -> RgbImage {
-        let mut img = RgbImage::new(self.elements.width as u32, self.elements.height as u32);
-
-        let [color_water, color_air, color_mineral, color_organic] = [
-            [46u8, 134, 171],
-            [221, 255, 247],
-            [71, 67, 80],
-            [119, 181, 44],
-        ]
-        .map(|c| Srgb::<u8>::new(c[0], c[1], c[2]).into_linear::<f32>());
+        let mut img = RgbImage::new(self.elements.width() as u32, self.elements.height() as u32);
 
         for (x, y, p) in img.enumerate_pixels_mut() {
-            let t = self.elements.get(x as usize, y as usize);
-            let (r, g, b) = Srgb::<u8>::from_linear(
-                (color_water * (t.water as f32 / 255.)
-                    + color_air * (t.air as f32 / 255.)
-                    + color_mineral * (t.mineral as f32 / 255.)
-                    + color_organic * (t.organic as f32 / 255.))
-                    / 4.0,
-            )
-            .into_components();
-            *p = Rgb([r, g, b]);
+            let t = self
+                .elements
+                .get(x as usize, y as usize)
+                .expect("Image made from grid should have same size");
+            *p = t.color();
         }
 
         img
     }
 
     fn update(&mut self) {
-        todo!()
+        let new = self
+            .elements
+            .windows(3)
+            .map(|w| {
+                let t = w.get(1, 1).unwrap();
+                match t.element {
+                    Element::Air => match w.get(1, 0) {
+                        Some(e) => e.clone(),
+                        None => t.clone(),
+                    },
+                    Element::Soil => match w.get(1, 2) {
+                        Some(e) => e.clone(),
+                        None => t.clone(),
+                    },
+                }
+            })
+            .collect();
+        self.elements = Grid::from_cells(self.elements.width(), self.elements.height(), new);
     }
 }
 
+#[derive(Debug, Clone)]
 struct Grid<T> {
     width: usize,
     height: usize,
@@ -116,14 +123,113 @@ impl<T> Grid<T> {
         }
     }
 
-    fn get(&self, x: usize, y: usize) -> &T {
-        &self.cells[x + self.width * y]
+    fn from_cells(width: usize, height: usize, cells: Vec<T>) -> Self {
+        Self {
+            width,
+            height,
+            cells,
+        }
+    }
+
+    fn get(&self, x: usize, y: usize) -> Option<&T> {
+        self.cells.get(x + self.width * y)
+    }
+
+    fn height(&self) -> usize {
+        self.height
+    }
+
+    fn width(&self) -> usize {
+        self.width
+    }
+
+    fn windows(&self, size: usize) -> impl Iterator<Item = GridWindow<T>> + '_ {
+        GridWindows::new(self, size)
     }
 }
 
+struct GridWindows<'a, T> {
+    grid: &'a Grid<T>,
+    x: usize,
+    y: usize,
+    size: usize,
+}
+
+impl<'a, T> GridWindows<'a, T> {
+    fn new(grid: &'a Grid<T>, size: usize) -> Self {
+        Self {
+            grid,
+            x: 0,
+            y: 0,
+            size,
+        }
+    }
+}
+
+impl<'a, T> Iterator for GridWindows<'a, T> {
+    type Item = GridWindow<'a, T>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.y as usize >= self.grid.height() {
+            return None;
+        }
+        let w = GridWindow {
+            grid: self.grid,
+            x: self.x,
+            y: self.y,
+            size: self.size,
+        };
+        self.x += 1;
+        if self.x >= self.grid.width() {
+            self.y += 1;
+            self.x = 0;
+        }
+        Some(w)
+    }
+}
+
+#[derive(Debug, Clone)]
+struct GridWindow<'a, T> {
+    grid: &'a Grid<T>,
+    x: usize,
+    y: usize,
+    size: usize,
+}
+
+impl<'a, T> GridWindow<'a, T> {
+    fn get(&self, x: usize, y: usize) -> Option<&T> {
+        let x = if let Some(x) = (self.x + x).checked_sub(self.size / 2) {
+            x
+        } else {
+            return None;
+        };
+
+        let y = if let Some(y) = (self.y + y).checked_sub(self.size / 2) {
+            y
+        } else {
+            return None;
+        };
+
+        self.grid.get(x, y)
+    }
+}
+
+#[derive(Debug, Clone)]
 struct Tile {
-    water: u8,
-    air: u8,
-    mineral: u8,
-    organic: u8,
+    element: Element,
+}
+
+impl Tile {
+    fn color(&self) -> Rgb<u8> {
+        match self.element {
+            Element::Air => Rgb([221, 255, 247]),
+            Element::Soil => Rgb([169, 113, 75]),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Ordinalize)]
+enum Element {
+    Air,
+    Soil,
 }
