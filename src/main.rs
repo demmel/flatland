@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let window = create_window(
         "",
         WindowOptions {
-            size: Some([512, 512]),
+            size: Some([1024, 1024]),
             ..Default::default()
         },
     )?;
@@ -88,16 +88,51 @@ impl State {
             .windows(3)
             .map(|w| {
                 let t = w.get(1, 1).unwrap();
-                match t.element {
+
+                let element = match t.element {
                     Element::Air => match w.get(1, 0) {
-                        Some(e) => e.clone(),
-                        None => t.clone(),
+                        Some(other) => match other.element {
+                            Element::Air => Element::Air,
+                            Element::Soil => Element::Soil,
+                            Element::Water => Element::Water,
+                        },
+                        None => Element::Air,
                     },
                     Element::Soil => match w.get(1, 2) {
-                        Some(e) => e.clone(),
-                        None => t.clone(),
+                        Some(other) => match other.element {
+                            Element::Air => Element::Air,
+                            Element::Soil => Element::Soil,
+                            Element::Water => Element::Water,
+                        },
+                        None => Element::Soil,
                     },
-                }
+                    Element::Water => match (w.get(1, 0), w.get(1, 2)) {
+                        (None, None) => Element::Water,
+                        (None, Some(below)) => match below.element {
+                            Element::Air => Element::Air,
+                            Element::Soil => Element::Water,
+                            Element::Water => Element::Water,
+                        },
+                        (Some(above), None) => match above.element {
+                            Element::Air => Element::Water,
+                            Element::Soil => Element::Soil,
+                            Element::Water => Element::Water,
+                        },
+                        (Some(above), Some(below)) => match (&above.element, &below.element) {
+                            (Element::Air, Element::Air) => Element::Air,
+                            (Element::Air, Element::Soil) => Element::Water,
+                            (Element::Air, Element::Water) => Element::Water,
+                            (Element::Soil, Element::Air) => Element::Water,
+                            (Element::Soil, Element::Soil) => Element::Soil,
+                            (Element::Soil, Element::Water) => Element::Soil,
+                            (Element::Water, Element::Air) => Element::Air,
+                            (Element::Water, Element::Soil) => Element::Water,
+                            (Element::Water, Element::Water) => Element::Water,
+                        },
+                    },
+                };
+
+                Tile { element }
             })
             .collect();
         self.elements = Grid::from_cells(self.elements.width(), self.elements.height(), new);
@@ -227,6 +262,7 @@ impl Tile {
         match self.element {
             Element::Air => Rgb([221, 255, 247]),
             Element::Soil => Rgb([169, 113, 75]),
+            Element::Water => Rgb([46, 134, 171]),
         }
     }
 }
@@ -235,4 +271,5 @@ impl Tile {
 enum Element {
     Air,
     Soil,
+    Water,
 }
