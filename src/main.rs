@@ -3,7 +3,7 @@ mod grid;
 use std::{error::Error, sync::mpsc::TryRecvError};
 
 use enum_ordinalize::Ordinalize;
-use grid::Grid;
+use grid::{Grid, GridLike};
 use image::{Rgb, RgbImage};
 use rand::Rng;
 use show_image::{
@@ -77,7 +77,7 @@ impl State {
         for (x, y, p) in img.enumerate_pixels_mut() {
             let t = self
                 .elements
-                .get(x as usize, y as usize)
+                .get(x as isize, y as isize)
                 .expect("Image made from grid should have same size");
             *p = t.color();
         }
@@ -88,28 +88,42 @@ impl State {
     fn update(&mut self) {
         let new = self
             .elements
-            .windows(3)
+            .windows(5)
             .map(|w| {
-                let t = w.get(1, 1).unwrap();
+                let t = w.get(0, 0).unwrap();
 
                 let element = match t.element {
-                    Element::Air => match w.get(1, 0) {
-                        Some(other) => match other.element {
+                    Element::Air => match w.get(0, -1) {
+                        Some(above) => match above.element {
                             Element::Air => Element::Air,
                             Element::Soil => Element::Soil,
-                            Element::Water => Element::Water,
+                            Element::Water => match w.get(0, -2) {
+                                Some(two_above) => match two_above.element {
+                                    Element::Air => Element::Water,
+                                    Element::Soil => Element::Soil,
+                                    Element::Water => Element::Water,
+                                },
+                                None => Element::Water,
+                            },
                         },
                         None => Element::Air,
                     },
-                    Element::Soil => match w.get(1, 2) {
-                        Some(other) => match other.element {
+                    Element::Soil => match w.get(0, 1) {
+                        Some(below) => match below.element {
                             Element::Air => Element::Air,
                             Element::Soil => Element::Soil,
-                            Element::Water => Element::Water,
+                            Element::Water => match w.get(0, 2) {
+                                Some(two_below) => match two_below.element {
+                                    Element::Air => Element::Air,
+                                    Element::Soil => Element::Water,
+                                    Element::Water => Element::Water,
+                                },
+                                None => Element::Water,
+                            },
                         },
                         None => Element::Soil,
                     },
-                    Element::Water => match (w.get(1, 0), w.get(1, 2)) {
+                    Element::Water => match (w.get(0, -1), w.get(0, 1)) {
                         (None, None) => Element::Water,
                         (None, Some(below)) => match below.element {
                             Element::Air => Element::Air,
