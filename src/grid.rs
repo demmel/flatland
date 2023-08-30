@@ -44,6 +44,13 @@ impl<T> Grid<T> {
             (0..self.width()).map(move |x| (x, y, self.get(x as isize, y as isize).unwrap()))
         })
     }
+
+    pub fn get_mut(&mut self, x: isize, y: isize) -> Option<&mut T> {
+        if x < 0 || y < 0 {
+            return None;
+        }
+        self.cells.get_mut(x as usize + self.width * y as usize)
+    }
 }
 
 impl<T> GridLike<T> for Grid<T> {
@@ -65,8 +72,7 @@ impl<T> GridLike<T> for Grid<T> {
 
 pub struct GridWindows<'a, T, G: GridLike<T>> {
     grid: &'a G,
-    x: usize,
-    y: usize,
+    enumerator: GridEnumerator,
     size: usize,
     _p: PhantomData<T>,
 }
@@ -75,8 +81,7 @@ impl<'a, T, G: GridLike<T>> GridWindows<'a, T, G> {
     fn new(grid: &'a G, size: usize) -> Self {
         Self {
             grid,
-            x: 0,
-            y: 0,
+            enumerator: GridEnumerator::new(grid),
             size,
             _p: PhantomData,
         }
@@ -87,22 +92,17 @@ impl<'a, T, G: GridLike<T>> Iterator for GridWindows<'a, T, G> {
     type Item = GridWindow<'a, T, G>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.y as usize >= self.grid.height() {
-            return None;
+        if let Some((x, y)) = self.enumerator.next() {
+            Some(GridWindow {
+                grid: self.grid,
+                x,
+                y,
+                size: self.size,
+                _p: PhantomData,
+            })
+        } else {
+            None
         }
-        let w = GridWindow {
-            grid: self.grid,
-            x: self.x,
-            y: self.y,
-            size: self.size,
-            _p: PhantomData,
-        };
-        self.x += 1;
-        if self.x >= self.grid.width() {
-            self.y += 1;
-            self.x = 0;
-        }
-        Some(w)
     }
 }
 
@@ -126,5 +126,40 @@ impl<'a, T, G: GridLike<T>> GridLike<T> for GridWindow<'a, T, G> {
 
     fn width(&self) -> usize {
         self.size
+    }
+}
+
+pub struct GridEnumerator {
+    width: usize,
+    height: usize,
+    x: usize,
+    y: usize,
+}
+
+impl GridEnumerator {
+    pub fn new<T, G: GridLike<T>>(grid: &G) -> Self {
+        Self {
+            width: grid.width(),
+            height: grid.height(),
+            x: 0,
+            y: 0,
+        }
+    }
+}
+
+impl Iterator for GridEnumerator {
+    type Item = (usize, usize);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.y as usize >= self.height {
+            return None;
+        }
+        let ret = (self.x, self.y);
+        self.x += 1;
+        if self.x >= self.width {
+            self.y += 1;
+            self.x = 0;
+        }
+        Some(ret)
     }
 }
