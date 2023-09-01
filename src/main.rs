@@ -13,13 +13,13 @@ use crate::simulation::State;
 
 #[show_image::main]
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut state: State = State::gen();
+    let mut state: State = State::gen(128, 128);
     let mut running: bool = false;
 
     let window = create_window(
         "",
         WindowOptions {
-            size: Some([1024, 1024]),
+            fullscreen: true,
             ..Default::default()
         },
     )?;

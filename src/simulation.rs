@@ -1,6 +1,6 @@
 use enum_ordinalize::Ordinalize;
 use image::{Rgb, RgbImage};
-use rand::Rng;
+use rand::{seq::SliceRandom, Rng};
 
 use crate::grid::{Grid, GridEnumerator, GridLike};
 
@@ -9,9 +9,9 @@ pub struct State {
 }
 
 impl State {
-    pub fn gen() -> Self {
+    pub fn gen(width: usize, height: usize) -> Self {
         Self {
-            elements: Grid::new(512, 512, |_, _| {
+            elements: Grid::new(width, height, |_, _| {
                 let mut rng = rand::thread_rng();
                 Tile {
                     element: unsafe {
@@ -43,8 +43,7 @@ impl State {
 
         let resolutions = loop {
             let mut conflicts = find_conflicts(&intended_movements);
-            let found_conflicts =
-                resolve_conflicts(&self.elements, &mut conflicts, &mut intended_movements);
+            let found_conflicts = resolve_conflicts(&mut conflicts, &mut intended_movements);
             if !found_conflicts {
                 break conflicts;
             } else {
@@ -71,53 +70,87 @@ impl State {
     }
 
     fn intended_movements(&self) -> Grid<(isize, isize)> {
+        use Element::*;
+
+        let mut rng = rand::thread_rng();
+
         let intended_movements = self
             .elements
             .windows(3)
             .map(|w| {
-                let t = w.get(0, 0).unwrap();
-
-                match t.element {
-                    Element::Air => match w.get(0, -1) {
-                        Some(above) => match above.element {
-                            Element::Air => (0, 0),
-                            Element::Soil => (0, -1),
-                            Element::Water => (0, -1),
-                        },
-                        None => (0, 0),
-                    },
-                    Element::Soil => match w.get(0, 1) {
-                        Some(below) => match below.element {
-                            Element::Air => (0, 1),
-                            Element::Soil => (0, 0),
-                            Element::Water => (0, 1),
-                        },
-                        None => (0, 0),
-                    },
-                    Element::Water => match (w.get(0, -1), w.get(0, 1)) {
-                        (None, None) => (0, 0),
-                        (None, Some(below)) => match below.element {
-                            Element::Air => (0, 1),
-                            Element::Soil => (0, 0),
-                            Element::Water => (0, 0),
-                        },
-                        (Some(above), None) => match above.element {
-                            Element::Air => (0, 0),
-                            Element::Soil => (0, -1),
-                            Element::Water => (0, 0),
-                        },
-                        (Some(above), Some(below)) => match (&above.element, &below.element) {
-                            (Element::Air, Element::Air) => (0, 1),
-                            (Element::Air, Element::Soil) => (0, 0),
-                            (Element::Air, Element::Water) => (0, 0),
-                            (Element::Soil, Element::Air) => (0, 0),
-                            (Element::Soil, Element::Soil) => (0, -1),
-                            (Element::Soil, Element::Water) => (0, -1),
-                            (Element::Water, Element::Air) => (0, 1),
-                            (Element::Water, Element::Soil) => (0, 0),
-                            (Element::Water, Element::Water) => (0, 0),
-                        },
-                    },
+                match (
+                    (
+                        w.get(-1, -1).map(|t| &t.element),
+                        w.get(0, -1).map(|t| &t.element),
+                        w.get(1, -1).map(|t| &t.element),
+                    ),
+                    (
+                        w.get(-1, 0).map(|t| &t.element),
+                        w.get(0, 0).map(|t| &t.element),
+                        w.get(1, 0).map(|t| &t.element),
+                    ),
+                    (
+                        w.get(-1, 1).map(|t| &t.element),
+                        w.get(0, 1).map(|t| &t.element),
+                        w.get(1, 1).map(|t| &t.element),
+                    ),
+                ) {
+                    // Air rises above soil and water
+                    ((_, Some(Water | Soil), _), (_, Some(Air), _), (_, _, _)) => (0, -1),
+                    // Soil falls below air and water
+                    ((_, _, _), (_, Some(Soil), _), (_, Some(Water | Air), _)) => (0, 1),
+                    // Water rises above soil
+                    ((_, Some(Soil), _), (_, Some(Water), _), (_, Some(Soil | Water), _)) => {
+                        (0, -1)
+                    }
+                    // Water falls below air
+                    ((_, Some(Air | Water), _), (_, Some(Water), _), (_, Some(Air), _)) => (0, 1),
+                    // Waters rolls down hills
+                    (
+                        (_, _, _),
+                        (Some(Air), Some(Water), _),
+                        (Some(Air), Some(Soil | Water), Some(Soil | Water) | None),
+                    ) => (-1, 1),
+                    (
+                        (_, _, _),
+                        (_, Some(Water), Some(Air)),
+                        (None | Some(Soil | Water), Some(Soil | Water), Some(Air)),
+                    ) => (1, 1),
+                    (
+                        (_, _, _),
+                        (Some(Air), Some(Water), Some(Air)),
+                        (Some(Air), Some(Soil | Water), Some(Air)),
+                    ) => (*[-1, 1].choose(&mut rng).unwrap(), 1),
+                    (
+                        (_, _, _),
+                        (Some(Air), Some(Water), Some(Air)),
+                        (Some(Water), Some(Soil | Water), Some(Water)),
+                    ) => (*[-1, 1].choose(&mut rng).unwrap(), 0),
+                    // Water tries to flatten
+                    (
+                        (_, _, _),
+                        (Some(Air), Some(Water), None | Some(Water)),
+                        (Some(Water), Some(Soil | Water), Some(Soil | Water) | None),
+                    ) => (-1, 0),
+                    (
+                        (_, _, _),
+                        (None | Some(Water), Some(Water), Some(Air)),
+                        (None | Some(Soil | Water), Some(Soil | Water), Some(Water)),
+                    ) => (1, 0),
+                    (
+                        (_, _, _),
+                        (None | Some(Soil | Air), Some(Air), Some(Water)),
+                        (_, Some(Water), Some(Soil | Water)),
+                    ) => (1, 0),
+                    (
+                        (_, _, _),
+                        (Some(Water), Some(Air), None | Some(Soil | Air)),
+                        (Some(Soil | Water), Some(Water), _),
+                    ) => (-1, 0),
+                    x => {
+                        // println!("Unhandled configuration: {x:?}");
+                        (0, 0)
+                    }
                 }
             })
             .collect();
@@ -153,23 +186,19 @@ fn find_conflicts(intended_movements: &Grid<(isize, isize)>) -> Grid<MoveConflic
 }
 
 fn resolve_conflicts(
-    elements: &Grid<Tile>,
     conflicts: &mut Grid<MoveConflict>,
     intended_movements: &mut Grid<(isize, isize)>,
 ) -> bool {
     let mut found = false;
+    let mut rng = rand::thread_rng();
+
     for (x, y) in GridEnumerator::new(conflicts) {
         let c = conflicts.get_mut(x as isize, y as isize).unwrap();
         if let MoveConflict::Conflict(candidates) = c {
             found = true;
-            candidates.sort_unstable_by_key(|(x, y)| (*y, *x));
-            let gravity_slots = candidates.clone();
-            candidates.sort_unstable_by_key(|(x, y)| match elements.get(*x, *y).unwrap().element {
-                Element::Air => -1,
-                Element::Soil => 1,
-                Element::Water => 0,
-            });
-            for ((sx, sy), (cx, cy)) in gravity_slots.into_iter().zip(candidates) {
+            let mut slots = candidates.clone();
+            slots.shuffle(&mut rng);
+            for ((sx, sy), (cx, cy)) in slots.into_iter().zip(candidates) {
                 *intended_movements.get_mut(*cx, *cy).unwrap() = (sx, sy);
             }
         }
