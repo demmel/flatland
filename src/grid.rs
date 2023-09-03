@@ -132,8 +132,10 @@ impl<'a, T, G: GridLike<T>> GridLike<T> for GridWindow<'a, T, G> {
 pub struct GridEnumerator {
     width: usize,
     height: usize,
-    x: usize,
-    y: usize,
+    x: isize,
+    y: isize,
+    rx: isize,
+    ry: isize,
 }
 
 impl GridEnumerator {
@@ -143,6 +145,8 @@ impl GridEnumerator {
             height: grid.height(),
             x: 0,
             y: 0,
+            rx: (grid.width() - 1) as isize,
+            ry: (grid.height() - 1) as isize,
         }
     }
 }
@@ -154,11 +158,26 @@ impl Iterator for GridEnumerator {
         if self.y as usize >= self.height {
             return None;
         }
-        let ret = (self.x, self.y);
+        let ret = (self.x as usize, self.y as usize);
         self.x += 1;
-        if self.x >= self.width {
+        if self.x as usize >= self.width {
             self.y += 1;
             self.x = 0;
+        }
+        Some(ret)
+    }
+}
+
+impl DoubleEndedIterator for GridEnumerator {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.ry < 0 {
+            return None;
+        }
+        let ret = (self.rx as usize, self.ry as usize);
+        self.rx -= 1;
+        if self.rx < 0 {
+            self.ry -= 1;
+            self.rx = (self.width - 1) as isize;
         }
         Some(ret)
     }
