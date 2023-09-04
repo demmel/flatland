@@ -1,6 +1,6 @@
 use enum_ordinalize::Ordinalize;
 use image::{Rgb, RgbImage};
-use palette::Srgb;
+use palette::{Mix, Srgb};
 use rand::{seq::SliceRandom, Rng};
 
 use crate::grid::{Grid, GridEnumerator, GridLike, GridWindow};
@@ -14,12 +14,16 @@ impl State {
         let mut ret = Self {
             elements: Grid::new(width, height, |_, _| {
                 let mut rng = rand::thread_rng();
+                let element = unsafe {
+                    Element::from_ordinal_unsafe(rng.gen_range(0..Element::variant_count() as i8))
+                };
                 Tile {
-                    element: unsafe {
-                        Element::from_ordinal_unsafe(
-                            rng.gen_range(0..Element::variant_count() as i8),
-                        )
+                    saturation: match element {
+                        Element::Air => rng.gen_range(0.1..=0.9),
+                        Element::Soil => 0.0,
+                        Element::Water => 1.0,
                     },
+                    element,
                     integrity: 0.0001,
                 }
             }),
@@ -48,7 +52,9 @@ impl State {
     pub fn update(&mut self) {
         let mut intended_movements = self.intended_movements();
 
+        let mut iters = 0;
         let resolutions = loop {
+            iters += 1;
             let mut conflicts = find_conflicts(&intended_movements);
             let found_conflicts =
                 resolve_conflicts(&self.elements, &mut conflicts, &mut intended_movements);
@@ -58,6 +64,7 @@ impl State {
                 continue;
             }
         };
+        println!("Conflict iters: {iters}");
 
         self.elements =
             Grid::new(
@@ -120,10 +127,84 @@ impl State {
     }
 
     fn intended_movements(&self) -> Grid<(isize, isize)> {
+        let mut rng = rand::thread_rng();
         let intended_movements = self
             .elements
             .windows(3)
-            .map(|w| w.get(0, 0).unwrap().intended_movement(&w))
+            .map(|w| {
+                let ref this = w.get(0, 0).unwrap();
+                let (mut dx, mut dy): (isize, isize) = (0, 0);
+
+                match this.phase() {
+                    Phase::Solid => {
+                        if !(-1..=1).any(|x| match w.get(x, 1) {
+                            Some(below) => match below.phase() {
+                                Phase::Solid => true,
+                                Phase::Liquid => false,
+                                Phase::Gas => false,
+                            },
+                            None => true,
+                        }) && w.get(0, 1).unwrap().weight() < this.weight()
+                        {
+                            dy += 1;
+                        }
+                    }
+                    Phase::Liquid => {
+                        let above = w.get(0, -1);
+                        if let Some(above) = above {
+                            if this.weight() < above.weight() {
+                                dy += -1;
+                            }
+                        }
+                        for x in -1..=1 {
+                            let below = w.get(x, 1);
+                            if let Some(below) = below {
+                                if this.weight() > below.weight() {
+                                    dx += x;
+                                    dy += 1;
+                                }
+                            }
+                            let level = w.get(x, 0);
+                            if let Some(level) = level {
+                                if this.weight() > level.weight() {
+                                    dx += if rng.gen() { x } else { 0 };
+                                }
+                            }
+                        }
+                    }
+                    Phase::Gas => {
+                        for x in -1..=1 {
+                            let above = w.get(x, -1);
+                            if let Some(above) = above {
+                                if this.weight() < above.weight() {
+                                    dx += x;
+                                    dy += -1;
+                                }
+                            }
+                            let below = w.get(x, 1);
+                            if let Some(below) = below {
+                                if this.weight() > below.weight() {
+                                    dx += x;
+                                    dy += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                (
+                    if dy.abs() >= 2 * dx.abs() {
+                        0
+                    } else {
+                        dx.clamp(-1, 1)
+                    },
+                    if dx.abs() >= 2 * dy.abs() {
+                        0
+                    } else {
+                        dy.clamp(-1, 1)
+                    },
+                )
+            })
             .collect();
         let intended_movements = Grid::from_cells(
             self.elements.width(),
@@ -213,121 +294,41 @@ impl MoveConflict {
 struct Tile {
     element: Element,
     integrity: f32,
+    saturation: f32,
 }
 
 impl Tile {
     fn color(&self) -> Srgb<u8> {
         // return Srgb::new(self.integrity, self.integrity, self.integrity).into_format();
 
+        let air = Srgb::new(221u8, 255, 247)
+            .into_format::<f32>()
+            .into_linear();
+        let water = Srgb::new(46u8, 134, 171).into_format::<f32>().into_linear();
+        let soil = Srgb::new(169u8, 113, 75).into_format::<f32>().into_linear();
+
+        let color = match self.element {
+            Element::Air => air.mix(water, 0.5 * self.saturation),
+            Element::Soil => soil.mix(water, 0.5 * self.saturation),
+            Element::Water => water.mix(air, 1.0 - self.saturation),
+        };
+
+        color.into()
+    }
+
+    fn phase(&self) -> Phase {
         match self.element {
-            Element::Air => Srgb::new(221, 255, 247),
-            Element::Soil => Srgb::new(169, 113, 75),
-            Element::Water => Srgb::new(46, 134, 171),
+            Element::Air => Phase::Gas,
+            Element::Soil => Phase::Solid,
+            Element::Water => Phase::Liquid,
         }
     }
 
-    fn intended_movement(&self, neighbors: &GridWindow<'_, Tile, Grid<Tile>>) -> (isize, isize) {
-        use Element::*;
-
-        let mut rng = rand::thread_rng();
-
-        let adjacent = (
-            (
-                neighbors.get(-1, -1).map(|t| &t.element),
-                neighbors.get(0, -1).map(|t| &t.element),
-                neighbors.get(1, -1).map(|t| &t.element),
-            ),
-            (
-                neighbors.get(-1, 0).map(|t| &t.element),
-                neighbors.get(1, 0).map(|t| &t.element),
-            ),
-            (
-                neighbors.get(-1, 1).map(|t| &t.element),
-                neighbors.get(0, 1).map(|t| &t.element),
-                neighbors.get(1, 1).map(|t| &t.element),
-            ),
-        );
-
+    fn weight(&self) -> f32 {
         match self.element {
-            Air => match adjacent {
-                // Air rises above soil and water
-                ((_, Some(Water | Soil), _), (_, _), (_, _, _)) => (0, -1),
-                x => {
-                    // println!("Unhandled configuration: {x:?}");
-                    (0, 0)
-                }
-            },
-            Soil => match adjacent {
-                // Soil falls below air and water
-                (
-                    (_, _, _),
-                    (_, _),
-                    (None | Some(Air | Water), Some(Water | Air), None | Some(Air | Water)),
-                ) => (0, 1),
-                // Soil rolls down hill
-                (
-                    (_, _, _),
-                    (Some(Air | Water), Some(Water | Air) | None),
-                    (Some(Air | Water), Some(Soil), Some(Soil) | None),
-                ) => (-1, 1),
-                (
-                    (_, _, _),
-                    (None | Some(Water | Air), Some(Air | Water)),
-                    (None | Some(Soil), Some(Soil), Some(Air | Water)),
-                ) => (1, 1),
-                (
-                    (_, _, _),
-                    (Some(Air | Water), Some(Air | Water)),
-                    (Some(Air | Water), Some(Soil), Some(Air | Water)),
-                ) => (*[-1, 1].choose(&mut rng).unwrap(), 1),
-                // Soil can form structure
-                ((_, _, _), (_, _), (Some(Soil), _, _)) => (0, 0),
-                ((_, _, _), (_, _), (_, _, Some(Soil))) => (0, 0),
-                x => {
-                    // println!("Unhandled configuration: {x:?}");
-                    (0, 0)
-                }
-            },
-            Water => match adjacent {
-                // Water rises above soil
-                ((_, Some(Soil), _), (_, _), (_, Some(Soil | Water), _)) => (0, -1),
-                // Water falls below air
-                ((_, Some(Air | Water), _), (_, _), (_, Some(Air), _)) => (0, 1),
-                // Waters rolls down hills
-                (
-                    (_, _, _),
-                    (Some(Air), _),
-                    (Some(Air), Some(Soil | Water), Some(Soil | Water) | None),
-                ) => (-1, 1),
-                (
-                    (_, _, _),
-                    (_, Some(Air)),
-                    (None | Some(Soil | Water), Some(Soil | Water), Some(Air)),
-                ) => (1, 1),
-                ((_, _, _), (Some(Air), Some(Air)), (Some(Air), Some(Soil | Water), Some(Air))) => {
-                    (*[-1, 1].choose(&mut rng).unwrap(), 1)
-                }
-                // Water tries to flatten
-                (
-                    (_, _, _),
-                    (Some(Air), None | Some(Water)),
-                    (Some(Soil | Water), Some(Soil | Water), Some(Soil | Water) | None),
-                ) => (-1, 0),
-                (
-                    (_, _, _),
-                    (None | Some(Water), Some(Air)),
-                    (None | Some(Soil | Water), Some(Soil | Water), Some(Soil | Water)),
-                ) => (1, 0),
-                (
-                    (_, _, _),
-                    (Some(Air), Some(Air)),
-                    (Some(Water), Some(Soil | Water), Some(Water)),
-                ) => (*[-1, 1].choose(&mut rng).unwrap(), 0),
-                x => {
-                    // println!("Unhandled configuration: {x:?}");
-                    (0, 0)
-                }
-            },
+            Element::Air => 0.1 - 0.1 * self.saturation,
+            Element::Soil => 10.0 - 5.0 * self.saturation,
+            Element::Water => self.saturation,
         }
     }
 }
@@ -337,4 +338,10 @@ enum Element {
     Air,
     Soil,
     Water,
+}
+
+enum Phase {
+    Solid,
+    Liquid,
+    Gas,
 }
