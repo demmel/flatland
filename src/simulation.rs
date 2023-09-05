@@ -109,8 +109,8 @@ impl State {
             let s = &mut t.saturation;
             *s = (*s + saturations.get(x as isize, y as isize).unwrap()).clamp(0.0, 1.0);
             match t.element {
-                Element::Air if *s >= 0.75 => t.element = Element::Water,
-                Element::Water if *s < 0.75 => t.element = Element::Air,
+                Element::Air if *s >= 0.9 => t.element = Element::Water,
+                Element::Water if *s < 0.5 => t.element = Element::Air,
                 _ => {}
             }
         }
@@ -143,7 +143,7 @@ impl State {
                 ]
                 .map(|(o, w)| {
                     w * match o {
-                        Some(o) => o.integrity * if o.element == t.element { 1.0 } else { 0.1 },
+                        Some(o) => o.integrity * if o.element == t.element { 1.0 } else { 0.5 },
                         None => 0.1,
                     }
                 })
@@ -216,11 +216,19 @@ impl State {
                     Phase::Gas => {
                         let candidates: Vec<(Vec<_>, Box<dyn Fn(&Tile) -> bool>)> = vec![
                             (
-                                vec![(-1, -1), (0, -1), (1, -1)],
+                                vec![(0, -1)],
                                 Box::new(|o: &Tile| o.density() > this.density()),
                             ),
                             (
-                                vec![(-1, 1), (0, 1), (1, 1)],
+                                vec![(-1, -1), (1, -1)],
+                                Box::new(|o: &Tile| o.density() > this.density()),
+                            ),
+                            (
+                                vec![(0, 1)],
+                                Box::new(|o: &Tile| o.density() < this.density()),
+                            ),
+                            (
+                                vec![(-1, 1), (1, 1)],
                                 Box::new(|o: &Tile| o.density() < this.density()),
                             ),
                         ];
@@ -232,9 +240,9 @@ impl State {
                     .into_iter()
                     .flat_map(|(mut tiles, check)| {
                         filter_and_shuffle(&mut rng, &w, &mut tiles, check);
-                        tiles.push((0, 0));
                         tiles
                     })
+                    .chain(std::iter::once((0, 0)))
                     .rev()
                     .collect();
 
@@ -305,9 +313,9 @@ impl Tile {
 
     fn density(&self) -> f32 {
         match self.element {
-            Element::Air => 0.1 - 0.1 * self.saturation,
+            Element::Air => 0.5 - 0.5 * self.saturation,
             Element::Soil => 10.0 - 5.0 * self.saturation,
-            Element::Water => self.saturation,
+            Element::Water => 0.5 + 0.5 * self.saturation,
         }
     }
 }
