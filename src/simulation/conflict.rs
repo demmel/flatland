@@ -1,4 +1,4 @@
-use std::{cmp::Reverse, collections::HashSet};
+use std::cmp::Reverse;
 
 use fixed::{types::extra::U0, FixedI32};
 use kiddo::fixed::{distance::squared_euclidean, kdtree::KdTree};

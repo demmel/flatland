@@ -4,7 +4,7 @@ use enum_ordinalize::Ordinalize;
 use image::{Rgb, RgbImage};
 use ordered_float::OrderedFloat;
 use palette::{Mix, Srgb};
-use rand::{seq::SliceRandom, Rng};
+use rand::prelude::*;
 
 use crate::grid::{Grid, GridEnumerator, GridLike, GridWindow};
 
