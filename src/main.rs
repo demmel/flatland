@@ -13,7 +13,7 @@ use crate::simulation::State;
 
 #[show_image::main]
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut state: State = State::gen(160, 90);
+    let mut state: State = State::gen(640, 360);
     let mut running: bool = false;
 
     let window = create_window(

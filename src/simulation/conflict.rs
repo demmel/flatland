@@ -91,6 +91,8 @@ pub(crate) fn resolve_conflicts(
             .map(|(x, y, _p)| (x as isize, y as isize))
             .collect();
 
+        println!("Orphans: {}", orphans.len());
+
         orphans
             .sort_by_key(|(x, y)| Reverse(OrderedFloat(elements.get(*x, *y).unwrap().integrity)));
 

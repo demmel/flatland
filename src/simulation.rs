@@ -176,19 +176,25 @@ impl State {
 
                 let candidates = match this.phase() {
                     Phase::Solid => {
-                        let candidates: Vec<(Vec<_>, Box<dyn Fn(&Tile) -> bool>)> = vec![(
-                            vec![(0, 1)],
-                            Box::new(|o: &Tile| {
-                                !(-1..=1).any(|x| match w.get(x, 1) {
-                                    Some(below) => match below.phase() {
-                                        Phase::Solid => true,
-                                        Phase::Liquid => false,
-                                        Phase::Gas => false,
-                                    },
-                                    None => true,
-                                }) && o.density() < this.density()
-                            }),
-                        )];
+                        let candidates: Vec<(Vec<_>, Box<dyn Fn(&Tile) -> bool>)> = vec![
+                            (
+                                vec![(0, -1)],
+                                Box::new(|o: &Tile| o.density() > this.density()),
+                            ),
+                            (
+                                vec![(0, 1)],
+                                Box::new(|o: &Tile| {
+                                    !(-1..=1).any(|x| match w.get(x, 1) {
+                                        Some(below) => match below.phase() {
+                                            Phase::Solid => true,
+                                            Phase::Liquid => false,
+                                            Phase::Gas => false,
+                                        },
+                                        None => true,
+                                    }) && o.density() < this.density()
+                                }),
+                            ),
+                        ];
                         candidates
                     }
                     Phase::Liquid => {
