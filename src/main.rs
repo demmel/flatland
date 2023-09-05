@@ -23,7 +23,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             ..Default::default()
         },
     )?;
-    window.set_image("image", state.to_image())?;
+
+    let update_image = |state: &State| window.set_image("image", state.to_image());
+    let update_state = |state: &mut State| state.update();
+
+    update_image(&state)?;
 
     let window_events = window.event_channel()?;
     loop {
@@ -34,15 +38,15 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
                 match event.input.key_code {
                     Some(VirtualKeyCode::Escape) => return Ok(()),
-                    Some(VirtualKeyCode::Space) if !running => state.update(),
+                    Some(VirtualKeyCode::Space) if !running => update_state(&mut state),
                     Some(VirtualKeyCode::S) => running = !running,
                     _ => continue,
                 }
-                window.set_image("image", state.to_image())?;
+                update_image(&state)?;
             }
             Err(TryRecvError::Empty) if running => {
-                state.update();
-                window.set_image("image", state.to_image())?;
+                update_state(&mut state);
+                update_image(&state)?;
             }
             Err(TryRecvError::Disconnected) => return Ok(()),
             _ => continue,
