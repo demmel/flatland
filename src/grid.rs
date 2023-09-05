@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-pub trait GridLike<T> {
+pub(crate) trait GridLike<T> {
     fn get(&self, x: isize, y: isize) -> Option<&T>;
     fn height(&self) -> usize;
     fn width(&self) -> usize;
@@ -14,14 +14,18 @@ pub trait GridLike<T> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Grid<T> {
+pub(crate) struct Grid<T> {
     width: usize,
     height: usize,
     cells: Vec<T>,
 }
 
 impl<T> Grid<T> {
-    pub fn new(width: usize, height: usize, init: impl Fn(usize, usize) -> T + Copy) -> Self {
+    pub(crate) fn new(
+        width: usize,
+        height: usize,
+        init: impl Fn(usize, usize) -> T + Copy,
+    ) -> Self {
         Self {
             width,
             height,
@@ -31,7 +35,7 @@ impl<T> Grid<T> {
         }
     }
 
-    pub fn from_cells(width: usize, height: usize, cells: Vec<T>) -> Self {
+    pub(crate) fn from_cells(width: usize, height: usize, cells: Vec<T>) -> Self {
         Self {
             width,
             height,
@@ -39,14 +43,14 @@ impl<T> Grid<T> {
         }
     }
 
-    pub fn enumerate(&self) -> impl Iterator<Item = (usize, usize, &T)> {
+    pub(crate) fn enumerate(&self) -> impl Iterator<Item = (usize, usize, &T)> {
         (0..self.height()).flat_map(move |y| {
             (0..self.width()).map(move |x| (x, y, self.get(x as isize, y as isize).unwrap()))
         })
     }
 
-    pub fn get_mut(&mut self, x: isize, y: isize) -> Option<&mut T> {
-        if x < 0 || y < 0 {
+    pub(crate) fn get_mut(&mut self, x: isize, y: isize) -> Option<&mut T> {
+        if x < 0 || y < 0 || x >= self.width as isize || y >= self.height as isize {
             return None;
         }
         self.cells.get_mut(x as usize + self.width * y as usize)
@@ -55,7 +59,7 @@ impl<T> Grid<T> {
 
 impl<T> GridLike<T> for Grid<T> {
     fn get(&self, x: isize, y: isize) -> Option<&T> {
-        if x < 0 || y < 0 {
+        if x < 0 || y < 0 || x >= self.width as isize || y >= self.height as isize {
             return None;
         }
         self.cells.get(x as usize + self.width * y as usize)
@@ -70,7 +74,7 @@ impl<T> GridLike<T> for Grid<T> {
     }
 }
 
-pub struct GridWindows<'a, T, G: GridLike<T>> {
+pub(crate) struct GridWindows<'a, T, G: GridLike<T>> {
     grid: &'a G,
     enumerator: GridEnumerator,
     size: usize,
@@ -107,7 +111,7 @@ impl<'a, T, G: GridLike<T>> Iterator for GridWindows<'a, T, G> {
 }
 
 #[derive(Debug, Clone)]
-pub struct GridWindow<'a, T, G: GridLike<T>> {
+pub(crate) struct GridWindow<'a, T, G: GridLike<T>> {
     grid: &'a G,
     x: usize,
     y: usize,
@@ -129,7 +133,22 @@ impl<'a, T, G: GridLike<T>> GridLike<T> for GridWindow<'a, T, G> {
     }
 }
 
-pub struct GridEnumerator {
+impl<'a, T, G: GridLike<T>> GridWindow<'a, T, G> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
+        (0..self.height())
+            .flat_map(move |y| {
+                (0..self.width()).map(move |x| {
+                    (
+                        x as isize - (self.width() / 2) as isize,
+                        y as isize - (self.height() / 2) as isize,
+                    )
+                })
+            })
+            .filter_map(|(x, y)| self.get(x, y))
+    }
+}
+
+pub(crate) struct GridEnumerator {
     width: usize,
     height: usize,
     x: isize,
@@ -139,7 +158,7 @@ pub struct GridEnumerator {
 }
 
 impl GridEnumerator {
-    pub fn new<T, G: GridLike<T>>(grid: &G) -> Self {
+    pub(crate) fn new<T, G: GridLike<T>>(grid: &G) -> Self {
         Self {
             width: grid.width(),
             height: grid.height(),
