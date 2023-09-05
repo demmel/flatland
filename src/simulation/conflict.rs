@@ -1,5 +1,7 @@
 use std::{cmp::Reverse, collections::HashSet};
 
+use fixed::{types::extra::U0, FixedI32};
+use kiddo::fixed::{distance::squared_euclidean, kdtree::KdTree};
 use ordered_float::OrderedFloat;
 
 use crate::grid::{Grid, GridEnumerator, GridLike};
@@ -11,7 +13,7 @@ pub(crate) fn reduce_potential_moves(
     elements: &Grid<Tile>,
 ) -> Grid<(isize, isize)> {
     let mut iters = 0;
-    let resolutions = loop {
+    let mut resolutions = loop {
         iters += 1;
         let mut conflicts = find_conflicts(&potential_moves);
         let found_conflicts = resolve_conflicts(elements, &mut conflicts, &mut potential_moves);
@@ -20,6 +22,8 @@ pub(crate) fn reduce_potential_moves(
         }
     };
     println!("Conflict iters: {iters}");
+
+    resolve_orphans(&mut resolutions, potential_moves, elements);
 
     Grid::new(
         elements.width(),
@@ -34,6 +38,56 @@ pub(crate) fn reduce_potential_moves(
             }
         },
     )
+}
+
+fn resolve_orphans(
+    resolutions: &mut Grid<MoveConflict>,
+    mut potential_moves: Grid<PotentialMoves>,
+    elements: &Grid<Tile>,
+) {
+    let mut orphans: Vec<_> = potential_moves
+        .enumerate()
+        .filter(|(_x, _y, p)| p.current().is_none())
+        .map(|(x, y, _p)| (x as isize, y as isize))
+        .collect();
+
+    let slots: Vec<_> = resolutions
+        .enumerate()
+        .filter(|(_x, _y, p)| matches!(p, MoveConflict::None))
+        .map(|(x, y, _p)| {
+            [
+                FixedI32::<U0>::from(x as i32),
+                FixedI32::<U0>::from(y as i32),
+            ]
+        })
+        .collect();
+
+    let mut slots_spatial: KdTree<FixedI32<U0>, usize, 2, 128, u32> =
+        KdTree::with_capacity(slots.len());
+    for (i, s) in slots.iter().enumerate() {
+        slots_spatial.add(s, i);
+    }
+
+    println!("Orphans: {}", orphans.len());
+
+    orphans.sort_by_key(|(x, y)| Reverse(OrderedFloat(elements.get(*x, *y).unwrap().integrity)));
+
+    for (ox, oy) in orphans {
+        let (_, slot_idx) = slots_spatial.nearest_one(
+            &[
+                FixedI32::<U0>::from(ox as i32),
+                FixedI32::<U0>::from(oy as i32),
+            ],
+            &squared_euclidean,
+        );
+
+        let [ssx, ssy] = slots[slot_idx];
+        let [sx, sy]: [i32; 2] = [ssx.to_num(), ssy.to_num()];
+        let [sx, sy] = [sx as isize, sy as isize];
+        potential_moves.get_mut(ox, oy).unwrap().push((sx, sy));
+        *resolutions.get_mut(sx, sy).unwrap() = MoveConflict::Resolved((ox, oy));
+        slots_spatial.remove(&[ssx, ssy], slot_idx);
+    }
 }
 
 pub(crate) fn find_conflicts(potential_moves: &Grid<PotentialMoves>) -> Grid<MoveConflict> {
@@ -75,35 +129,6 @@ pub(crate) fn resolve_conflicts(
             for (cx, cy) in candidates {
                 potential_moves.get_mut(*cx, *cy).unwrap().pop();
             }
-        }
-    }
-
-    if !found {
-        let mut orphans: Vec<_> = potential_moves
-            .enumerate()
-            .filter(|(_x, _y, p)| p.current().is_none())
-            .map(|(x, y, _p)| (x as isize, y as isize))
-            .collect();
-
-        let mut slots: HashSet<_> = conflicts
-            .enumerate()
-            .filter(|(_x, _y, p)| matches!(p, MoveConflict::None))
-            .map(|(x, y, _p)| (x as isize, y as isize))
-            .collect();
-
-        println!("Orphans: {}", orphans.len());
-
-        orphans
-            .sort_by_key(|(x, y)| Reverse(OrderedFloat(elements.get(*x, *y).unwrap().integrity)));
-
-        for (ox, oy) in orphans {
-            let (sx, sy) = slots
-                .iter()
-                .min_by_key(|(x, y)| (*x - ox).pow(2) + (*y - oy).pow(2))
-                .unwrap();
-            potential_moves.get_mut(ox, oy).unwrap().push((*sx, *sy));
-            *conflicts.get_mut(*sx, *sy).unwrap() = MoveConflict::Resolved((ox, oy));
-            slots.remove(&(*sx, *sy));
         }
     }
 

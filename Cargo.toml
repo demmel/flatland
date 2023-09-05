@@ -7,7 +7,9 @@ edition = "2021"
 
 [dependencies]
 enum-ordinalize = "3.1.13"
+fixed = "1.23.1"
 image = "0.24.7"
+kiddo = "2.1.1"
 ordered-float = "3.9.1"
 palette = "0.7.3"
 rand = "0.8.5"
