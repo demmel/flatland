@@ -4,9 +4,10 @@ use ordered_float::OrderedFloat;
 
 use crate::grid::{Grid, GridEnumerator, GridLike};
 
-use super::{position_score, Tile};
+use super::{config::Config, position_score, Tile};
 
 pub(crate) fn reduce_potential_moves(
+    config: &Config,
     mut potential_moves: Grid<PotentialMoves>,
     elements: &Grid<Tile>,
 ) -> Grid<(isize, isize)> {
@@ -14,7 +15,8 @@ pub(crate) fn reduce_potential_moves(
     let mut resolutions = loop {
         iters += 1;
         let mut conflicts = find_conflicts(&potential_moves);
-        let found_conflicts = resolve_conflicts(elements, &mut conflicts, &mut potential_moves);
+        let found_conflicts =
+            resolve_conflicts(config, elements, &mut conflicts, &mut potential_moves);
         if !found_conflicts {
             break conflicts;
         }
@@ -103,6 +105,7 @@ pub(crate) fn find_conflicts(potential_moves: &Grid<PotentialMoves>) -> Grid<Mov
 }
 
 pub(crate) fn resolve_conflicts(
+    config: &Config,
     elements: &Grid<Tile>,
     conflicts: &mut Grid<MoveConflict>,
     potential_moves: &mut Grid<PotentialMoves>,
@@ -118,6 +121,7 @@ pub(crate) fn resolve_conflicts(
                 .enumerate()
                 .max_by_key(|(_, (cx, cy))| {
                     OrderedFloat(position_score(
+                        config,
                         elements,
                         elements.get(*cx, *cy).unwrap(),
                         x as isize,
