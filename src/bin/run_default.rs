@@ -1,6 +1,3 @@
-mod grid;
-mod simulation;
-
 use std::{error::Error, sync::mpsc::TryRecvError};
 
 use show_image::{
@@ -9,11 +6,11 @@ use show_image::{
     WindowOptions,
 };
 
-use crate::simulation::State;
+use roots::simulation::{config::Config, State};
 
 #[show_image::main]
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut state: State = State::gen(320, 180);
+    let mut state: State = State::gen(Config::default(), 320, 180);
     let mut running: bool = false;
 
     let window = create_window(

@@ -6,7 +6,7 @@ use crate::grid::{Grid, GridEnumerator, GridLike};
 
 use super::{config::Config, position_score, Tile};
 
-pub(crate) fn reduce_potential_moves(
+pub fn reduce_potential_moves(
     config: &Config,
     mut potential_moves: Grid<PotentialMoves>,
     elements: &Grid<Tile>,
@@ -21,7 +21,7 @@ pub(crate) fn reduce_potential_moves(
             break conflicts;
         }
     };
-    println!("Conflict iters: {iters}");
+    // println!("Conflict iters: {iters}");
 
     resolve_orphans(&mut resolutions, potential_moves);
 
@@ -67,7 +67,7 @@ fn resolve_orphans(
         slots_spatial.add(s, i);
     }
 
-    println!("Orphans: {}", orphans.len());
+    // println!("Orphans: {}", orphans.len());
 
     for (ox, oy) in orphans {
         let (_, slot_idx) = slots_spatial.nearest_one(
@@ -87,7 +87,7 @@ fn resolve_orphans(
     }
 }
 
-pub(crate) fn find_conflicts(potential_moves: &Grid<PotentialMoves>) -> Grid<MoveConflict> {
+pub fn find_conflicts(potential_moves: &Grid<PotentialMoves>) -> Grid<MoveConflict> {
     let mut conflicts = Grid::new(
         potential_moves.width(),
         potential_moves.height(),
@@ -104,7 +104,7 @@ pub(crate) fn find_conflicts(potential_moves: &Grid<PotentialMoves>) -> Grid<Mov
     conflicts
 }
 
-pub(crate) fn resolve_conflicts(
+pub fn resolve_conflicts(
     config: &Config,
     elements: &Grid<Tile>,
     conflicts: &mut Grid<MoveConflict>,
@@ -142,7 +142,7 @@ pub(crate) fn resolve_conflicts(
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum MoveConflict {
+pub enum MoveConflict {
     None,
     Resolved((isize, isize)),
     Conflict(Vec<(isize, isize)>),
@@ -159,12 +159,12 @@ impl MoveConflict {
 }
 
 #[derive(Debug)]
-pub(crate) struct PotentialMoves {
+pub struct PotentialMoves {
     reverse_preferences: Vec<(isize, isize)>,
 }
 
 impl PotentialMoves {
-    pub(crate) fn new(reverse_preferences: Vec<(isize, isize)>) -> PotentialMoves {
+    pub fn new(reverse_preferences: Vec<(isize, isize)>) -> PotentialMoves {
         Self {
             reverse_preferences,
         }

@@ -1,5 +1,5 @@
-mod config;
-pub(crate) mod conflict;
+pub mod config;
+pub mod conflict;
 
 use enum_ordinalize::Ordinalize;
 use image::{Rgb, RgbImage};
@@ -14,13 +14,13 @@ use self::{
     conflict::{reduce_potential_moves, PotentialMoves},
 };
 
-pub(crate) struct State {
-    pub(crate) elements: Grid<Tile>,
-    pub(crate) config: Config,
+pub struct State {
+    pub elements: Grid<Tile>,
+    pub config: Config,
 }
 
 impl State {
-    pub(crate) fn gen(width: usize, height: usize) -> Self {
+    pub fn gen(config: Config, width: usize, height: usize) -> Self {
         Self {
             elements: Grid::new(width, height, |_, _| {
                 let mut rng = rand::thread_rng();
@@ -36,11 +36,11 @@ impl State {
                     element,
                 }
             }),
-            config: Config::default(),
+            config,
         }
     }
 
-    pub(crate) fn to_image(&self) -> RgbImage {
+    pub fn to_image(&self) -> RgbImage {
         let mut img = RgbImage::new(self.elements.width() as u32, self.elements.height() as u32);
 
         for (x, y, p) in img.enumerate_pixels_mut() {
@@ -55,7 +55,7 @@ impl State {
         img
     }
 
-    pub(crate) fn update(&mut self) {
+    pub fn update(&mut self) {
         self.update_positions();
         self.update_saturations();
     }
@@ -70,8 +70,6 @@ impl State {
     }
 
     fn update_saturations(&mut self) {
-        let mut rng = rand::thread_rng();
-
         let saturations = self
             .elements
             .windows(3)
@@ -79,24 +77,7 @@ impl State {
                 let total: f32 = w.iter().map(|t| t.saturation).sum();
                 let count = w.iter().count();
                 let avg = total / count as f32;
-                let max = w
-                    .iter()
-                    .map(|t| OrderedFloat(t.saturation))
-                    .max()
-                    .unwrap()
-                    .0;
-                let min = w
-                    .iter()
-                    .map(|t| OrderedFloat(t.saturation))
-                    .min()
-                    .unwrap()
-                    .0;
-
-                let target = match w.get(0, 0).unwrap().element {
-                    Element::Air | Element::Soil => rng.gen_range(avg..=max),
-                    Element::Water => rng.gen_range(min..=avg),
-                };
-
+                let target = avg;
                 let diff = target - w.get(0, 0).unwrap().saturation;
                 self.config.saturation_diffusion_rate * diff
             })
@@ -120,7 +101,7 @@ impl State {
         }
     }
 
-    pub(crate) fn potential_moves(&self) -> Grid<PotentialMoves> {
+    pub fn potential_moves(&self) -> Grid<PotentialMoves> {
         let potential_move = self
             .elements
             .enumerate()
@@ -154,7 +135,7 @@ impl State {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct Tile {
+pub struct Tile {
     element: Element,
     saturation: f32,
 }
