@@ -6,7 +6,7 @@ use ordered_float::OrderedFloat;
 use palette::{Mix, Srgb};
 use rand::prelude::*;
 
-use crate::grid::{Grid, GridEnumerator, GridLike, GridWindow};
+use crate::grid::{Grid, GridEnumerator, GridLike};
 
 use self::conflict::{reduce_potential_moves, PotentialMoves};
 
@@ -16,7 +16,7 @@ pub(crate) struct State {
 
 impl State {
     pub(crate) fn gen(width: usize, height: usize) -> Self {
-        let mut ret = Self {
+        Self {
             elements: Grid::new(width, height, |_, _| {
                 let mut rng = rand::thread_rng();
                 let element = unsafe {
@@ -29,14 +29,9 @@ impl State {
                         Element::Water => 1.0,
                     },
                     element,
-                    integrity: 0.0001,
                 }
             }),
-        };
-
-        ret.update_integrities();
-
-        ret
+        }
     }
 
     pub(crate) fn to_image(&self) -> RgbImage {
@@ -57,7 +52,6 @@ impl State {
     pub(crate) fn update(&mut self) {
         self.update_positions();
         self.update_saturations();
-        self.update_integrities();
     }
 
     fn update_positions(&mut self) {
@@ -116,163 +110,32 @@ impl State {
         }
     }
 
-    fn update_integrities(&mut self) {
-        for (x, y) in GridEnumerator::new(&self.elements) {
-            let t = self.elements.get_mut(x as isize, y as isize).unwrap();
-            t.integrity = match t.element {
-                Element::Air => 0.1 + 0.1 * t.saturation,
-                Element::Soil => 0.3 * (0.25 - (t.saturation - 0.5).powi(2)) / 0.25,
-                Element::Water => 0.2 + 0.1 * t.saturation,
-            }
-        }
-
-        for (x, y) in GridEnumerator::new(&self.elements).rev() {
-            let (x, y) = (x as isize, y as isize);
-
-            let integrity = {
-                let t = self.elements.get(x, y).unwrap();
-                [
-                    (self.elements.get(x - 1, y - 1), 1.0 / 16.0),
-                    (self.elements.get(x, y - 1), 3.0 / 16.0),
-                    (self.elements.get(x + 1, y - 1), 1.0 / 16.0),
-                    (self.elements.get(x - 1, y), 3.0 / 16.0),
-                    (self.elements.get(x + 1, y), 3.0 / 16.0),
-                    (self.elements.get(x - 1, y + 1), 1.0 / 16.0),
-                    (self.elements.get(x, y + 1), 3.0 / 16.0),
-                    (self.elements.get(x + 1, y + 1), 1.0 / 16.0),
-                ]
-                .map(|(o, w)| {
-                    w * match o {
-                        Some(o) => o.integrity * if o.element == t.element { 1.0 } else { 0.5 },
-                        None => 0.1,
-                    }
-                })
-                .into_iter()
-                .sum::<f32>()
-                .clamp(0.0, 1.0)
-            };
-
-            self.elements.get_mut(x, y).unwrap().integrity = integrity;
-        }
-    }
-
     pub(crate) fn potential_moves(&self) -> Grid<PotentialMoves> {
-        let mut rng = rand::thread_rng();
-        let intended_movements = self
+        let potential_move = self
             .elements
-            .windows(3)
-            .map(|w| {
-                let ref this = w.get(0, 0).unwrap();
-
-                fn filter_and_shuffle<F: Fn(&Tile) -> bool>(
-                    rng: &mut rand::rngs::ThreadRng,
-                    w: &GridWindow<'_, Tile, Grid<Tile>>,
-                    candidates: &mut Vec<(isize, isize)>,
-                    check: F,
-                ) {
-                    candidates.retain(|(x, y)| w.get(*x, *y).map(|t| check(t)).unwrap_or(false));
-                    candidates.shuffle(rng);
-                }
-
-                let candidates = match this.phase() {
-                    Phase::Solid => {
-                        let candidates: Vec<(Vec<_>, Box<dyn Fn(&Tile) -> bool>)> = vec![
-                            (
-                                vec![(0, -1)],
-                                Box::new(|o: &Tile| o.density() > this.density()),
-                            ),
-                            (
-                                vec![(0, 1)],
-                                Box::new(|o: &Tile| {
-                                    !(-1..=1).any(|x| match w.get(x, 1) {
-                                        Some(below) => match below.phase() {
-                                            Phase::Solid => true,
-                                            Phase::Liquid => false,
-                                            Phase::Gas => false,
-                                        },
-                                        None => true,
-                                    }) && o.density() < this.density()
-                                }),
-                            ),
-                        ];
-                        candidates
-                    }
-                    Phase::Liquid => {
-                        let candidates: Vec<(Vec<_>, Box<dyn Fn(&Tile) -> bool>)> = vec![
-                            (
-                                vec![(0, -1)],
-                                Box::new(|o: &Tile| o.density() > this.density()),
-                            ),
-                            (
-                                vec![(0, 1)],
-                                Box::new(|o: &Tile| o.density() < this.density()),
-                            ),
-                            (
-                                vec![(-1, 1), (1, 1)],
-                                Box::new(|o: &Tile| o.density() < this.density()),
-                            ),
-                            (
-                                vec![(-1, 0), (1, 0)],
-                                Box::new(|o: &Tile| o.density() < this.density()),
-                            ),
-                        ];
-                        candidates
-                    }
-
-                    Phase::Gas => {
-                        let candidates: Vec<(Vec<_>, Box<dyn Fn(&Tile) -> bool>)> = vec![
-                            (
-                                vec![(0, -1)],
-                                Box::new(|o: &Tile| o.density() > this.density()),
-                            ),
-                            (
-                                vec![(-1, -1), (1, -1)],
-                                Box::new(|o: &Tile| o.density() > this.density()),
-                            ),
-                            (
-                                vec![(0, 1)],
-                                Box::new(|o: &Tile| o.density() < this.density()),
-                            ),
-                            (
-                                vec![(-1, 1), (1, 1)],
-                                Box::new(|o: &Tile| o.density() < this.density()),
-                            ),
-                        ];
-                        candidates
-                    }
-                };
-
-                let potential_moves: Vec<_> = candidates
-                    .into_iter()
-                    .flat_map(|(mut tiles, check)| {
-                        filter_and_shuffle(&mut rng, &w, &mut tiles, check);
-                        tiles
+            .enumerate()
+            .map(|(x, y, t)| {
+                let mut moves: Vec<_> = (-1..=1)
+                    .flat_map(|dy| (-1..=1).map(move |dx| (x as isize + dx, y as isize + dy)))
+                    .filter(|&(x, y)| {
+                        !(x < 0
+                            || y < 0
+                            || x as usize >= self.elements.width()
+                            || y as usize >= self.elements.height())
                     })
-                    .chain(std::iter::once((0, 0)))
-                    .rev()
                     .collect();
 
-                potential_moves
+                moves.sort_unstable_by_key(|(x, y)| {
+                    OrderedFloat(position_score(&self.elements, t, *x, *y))
+                });
+
+                PotentialMoves::new(moves)
             })
             .collect();
-        let intended_movements = Grid::from_cells(
+        Grid::from_cells(
             self.elements.width(),
             self.elements.height(),
-            intended_movements,
-        );
-        Grid::new(
-            intended_movements.width(),
-            intended_movements.height(),
-            |x, y| {
-                PotentialMoves::new(
-                    intended_movements
-                        .get(x as isize, y as isize)
-                        .unwrap()
-                        .iter()
-                        .map(|(dx, dy)| (x as isize + dx, y as isize + dy))
-                        .collect(),
-                )
-            },
+            potential_move,
         )
     }
 }
@@ -280,7 +143,6 @@ impl State {
 #[derive(Debug, Clone)]
 pub(crate) struct Tile {
     element: Element,
-    integrity: f32,
     saturation: f32,
 }
 
@@ -324,9 +186,74 @@ impl Tile {
             Element::Water => 0.5 + 0.5 * self.saturation,
         }
     }
+
+    fn cohesion(&self) -> f32 {
+        match self.element {
+            Element::Air => 0.1 + 0.4 * self.saturation,
+            Element::Soil => -2.5 * self.saturation.powi(2) + 3.25 * self.saturation,
+            Element::Water => 0.5,
+        }
+    }
+
+    fn adhesion(&self) -> f32 {
+        match self.element {
+            Element::Air => 0.1 + 0.65 * self.saturation,
+            Element::Soil => self.cohesion(),
+            Element::Water => 0.75,
+        }
+    }
+
+    fn attractive_force(&self, other: &Self) -> f32 {
+        if self.element == other.element {
+            self.cohesion() * other.cohesion()
+        } else {
+            self.adhesion() * other.adhesion()
+        }
+    }
 }
 
-#[derive(Debug, Clone, Ordinalize, PartialEq, Eq)]
+fn position_score(elements: &Grid<Tile>, t: &Tile, x: isize, y: isize) -> f32 {
+    let select_other = |ox: isize, oy: isize| {
+        let other = elements.get(ox, oy);
+        other
+            .map(|other| {
+                if t as *const _ == other as *const _ {
+                    elements.get(x, y)
+                } else {
+                    Some(other)
+                }
+            })
+            .flatten()
+    };
+
+    let attraction_score = [
+        (select_other(x - 1, y - 1), 1.0 / 16.0),
+        (select_other(x, y - 1), 3.0 / 16.0),
+        (select_other(x + 1, y - 1), 1.0 / 16.0),
+        (select_other(x - 1, y), 3.0 / 16.0),
+        (select_other(x + 1, y), 3.0 / 16.0),
+        (select_other(x - 1, y + 1), 1.0 / 16.0),
+        (select_other(x, y + 1), 3.0 / 16.0),
+        (select_other(x + 1, y + 1), 1.0 / 16.0),
+    ]
+    .map(|(o, w)| {
+        w * match o {
+            Some(o) => t.attractive_force(o),
+            None => t.adhesion().powi(2),
+        }
+    })
+    .into_iter()
+    .sum::<f32>();
+
+    let density_score = match select_other(x, y + 1) {
+        Some(below) => (below.density() - t.density()) / (below.density() + t.density()),
+        None => 0.0,
+    };
+
+    attraction_score + density_score
+}
+
+#[derive(Debug, Clone, Copy, Ordinalize, PartialEq, Eq)]
 enum Element {
     Air,
     Soil,

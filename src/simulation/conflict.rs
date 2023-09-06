@@ -1,12 +1,10 @@
-use std::cmp::Reverse;
-
 use fixed::{types::extra::U0, FixedI32};
 use kiddo::fixed::{distance::squared_euclidean, kdtree::KdTree};
 use ordered_float::OrderedFloat;
 
 use crate::grid::{Grid, GridEnumerator, GridLike};
 
-use super::Tile;
+use super::{position_score, Tile};
 
 pub(crate) fn reduce_potential_moves(
     mut potential_moves: Grid<PotentialMoves>,
@@ -23,7 +21,7 @@ pub(crate) fn reduce_potential_moves(
     };
     println!("Conflict iters: {iters}");
 
-    resolve_orphans(&mut resolutions, potential_moves, elements);
+    resolve_orphans(&mut resolutions, potential_moves);
 
     Grid::new(
         elements.width(),
@@ -43,9 +41,8 @@ pub(crate) fn reduce_potential_moves(
 fn resolve_orphans(
     resolutions: &mut Grid<MoveConflict>,
     mut potential_moves: Grid<PotentialMoves>,
-    elements: &Grid<Tile>,
 ) {
-    let mut orphans: Vec<_> = potential_moves
+    let orphans: Vec<_> = potential_moves
         .enumerate()
         .filter(|(_x, _y, p)| p.current().is_none())
         .map(|(x, y, _p)| (x as isize, y as isize))
@@ -69,8 +66,6 @@ fn resolve_orphans(
     }
 
     println!("Orphans: {}", orphans.len());
-
-    orphans.sort_by_key(|(x, y)| Reverse(OrderedFloat(elements.get(*x, *y).unwrap().integrity)));
 
     for (ox, oy) in orphans {
         let (_, slot_idx) = slots_spatial.nearest_one(
@@ -121,7 +116,14 @@ pub(crate) fn resolve_conflicts(
             let (winner_index, _) = candidates
                 .iter()
                 .enumerate()
-                .max_by_key(|(_, (cx, cy))| OrderedFloat(elements.get(*cx, *cy).unwrap().integrity))
+                .max_by_key(|(_, (cx, cy))| {
+                    OrderedFloat(position_score(
+                        elements,
+                        elements.get(*cx, *cy).unwrap(),
+                        x as isize,
+                        y as isize,
+                    ))
+                })
                 .unwrap();
 
             candidates.swap_remove(winner_index);
