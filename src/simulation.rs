@@ -115,8 +115,11 @@ impl State {
             .elements
             .enumerate()
             .map(|(x, y, t)| {
-                let mut moves: Vec<_> = (-1..=1)
-                    .flat_map(|dy| (-1..=1).map(move |dx| (x as isize + dx, y as isize + dy)))
+                let mut moves: Vec<_> = t
+                    .phase()
+                    .allowed_moves()
+                    .into_iter()
+                    .map(move |(dx, dy)| (x as isize + dx, y as isize + dy))
                     .filter(|&(x, y)| {
                         !(x < 0
                             || y < 0
@@ -250,7 +253,7 @@ fn position_score(elements: &Grid<Tile>, t: &Tile, x: isize, y: isize) -> f32 {
         None => 0.0,
     };
 
-    attraction_score + density_score
+    (attraction_score + density_score) / 2.0
 }
 
 #[derive(Debug, Clone, Copy, Ordinalize, PartialEq, Eq)]
@@ -264,4 +267,23 @@ enum Phase {
     Solid,
     Liquid,
     Gas,
+}
+
+impl Phase {
+    fn allowed_moves(&self) -> Vec<(isize, isize)> {
+        match self {
+            Phase::Solid => vec![(0, -1), (0, 0), (-1, 1), (0, 1), (1, 1)],
+            Phase::Liquid | Phase::Gas => vec![
+                (-1, -1),
+                (0, -1),
+                (1, -1),
+                (-1, 0),
+                (0, 0),
+                (1, 0),
+                (-1, 1),
+                (0, 1),
+                (1, 1),
+            ],
+        }
+    }
 }
