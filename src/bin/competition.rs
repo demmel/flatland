@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, error::Error, sync::mpsc::TryRecvError};
+use std::{cmp::Ordering, error::Error, fs::File, sync::mpsc::TryRecvError};
 
 use image::{GenericImage, RgbImage};
 use rand::prelude::*;
@@ -133,7 +133,14 @@ fn setup(competition_config: &CompeitionConfig) -> (CompetingConfigs, SelectedCo
 
     let competitors = CompetingConfigs::new(
         (0..competition_config.population_size)
-            .map(|_| Config::gen(&mut rng))
+            .map(|i| {
+                if i == 0 {
+                    if let Ok(f) = File::open("winner.json") {
+                        return serde_json::from_reader(f).unwrap();
+                    }
+                }
+                Config::gen(&mut rng)
+            })
             .collect(),
     );
 
@@ -149,7 +156,8 @@ fn rank_selected(
     if !competitors.rank(ordering) {
         let competitors_inner = competitors.competitors();
 
-        println!("Winnder: {:?}", competitors_inner[0]);
+        serde_json::to_writer_pretty(File::create("winnder.json").unwrap(), &competitors_inner[0])
+            .unwrap();
 
         let mut rng = thread_rng();
         let mut new_competitors = Vec::with_capacity(competitors_inner.len());

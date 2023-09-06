@@ -1,0 +1,77 @@
+{
+  "air_adhesion": {
+    "coeffs": [
+      0.14091045
+    ]
+  },
+  "air_cohesion": {
+    "coeffs": [
+      0.99371433,
+      0.57761747
+    ]
+  },
+  "air_density": {
+    "coeffs": [
+      0.80638576
+    ]
+  },
+  "air_to_water_saturation_threshold": 0.7229958,
+  "saturation_diffusion_rate": 0.010326445,
+  "soil_adhesion": {
+    "coeffs": [
+      0.12992221
+    ]
+  },
+  "soil_cohesion": {
+    "coeffs": [
+      0.09551746
+    ]
+  },
+  "soil_density": {
+    "coeffs": [
+      0.27494323,
+      0.73306495
+    ]
+  },
+  "soil_is_liquid_saturation_threshold": 0.34925234,
+  "water_adhesion": {
+    "coeffs": [
+      0.763593,
+      0.9642378
+    ]
+  },
+  "water_cohesion": {
+    "coeffs": [
+      0.84220123,
+      0.83066696
+    ]
+  },
+  "water_density": {
+    "coeffs": [
+      0.671913
+    ]
+  },
+  "water_to_air_saturation_threshold": 0.5988529,
+  "neighbor_attraction_weights": [
+    0.23220122,
+    0.5770583,
+    -0.9844861,
+    0.85592604,
+    0.16274536,
+    0.27785265,
+    -0.3447389,
+    0.13769901
+  ],
+  "neighbor_density_weights": [
+    -0.89857817,
+    0.15938914,
+    -0.07239878,
+    0.8611984,
+    -0.2757029,
+    -0.57665724,
+    0.49254262,
+    0.6049819
+  ],
+  "attraction_score_weight": 0.023112655,
+  "density_score_weight": 0.56910336
+}

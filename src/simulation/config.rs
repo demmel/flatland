@@ -1,6 +1,7 @@
 use rand::{seq::IteratorRandom, thread_rng, Rng};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub air_adhesion: Polynomial,
     pub air_cohesion: Polynomial,
@@ -161,7 +162,7 @@ fn crossover_f32_arrays(a: &[f32; 8], b: &[f32; 8]) -> [f32; 8] {
     res
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Polynomial {
     coeffs: Vec<f32>,
 }
