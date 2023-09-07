@@ -235,25 +235,24 @@ fn position_score(config: &Config, elements: &Grid<Tile>, t: &Tile, x: isize, y:
 
     let mut attraction_score = 0.0;
     let mut density_score = 0.0;
-    for ((o, aw), dw) in neighbors
-        .iter()
-        .zip(config.neighbor_attraction_weights)
-        .zip(config.neighbor_density_weights)
-    {
-        attraction_score += aw
-            * match o {
-                Some(o) => t.attractive_force(o, config),
-                None => t.adhesion(config).powi(2),
-            };
+    for (i, o) in neighbors.iter().enumerate() {
+        let aw = config.neighbor_attraction_weights[i];
+        let dw = config.neighbor_density_weights[i];
 
-        density_score += dw
-            * match o {
-                Some(o) => {
-                    (o.density(config) - t.density(config))
-                        / (o.density(config) + t.density(config))
-                }
-                None => 0.0,
-            };
+        let (a, d) = match o {
+            Some(o) => {
+                let od = o.density(config);
+                let td = t.density(config);
+                (
+                    aw * t.attractive_force(o, config),
+                    dw * (od - td) / (od + td),
+                )
+            }
+            None => (aw * t.adhesion(config).powi(2), 0.0),
+        };
+
+        attraction_score += a;
+        density_score += d;
     }
 
     config.attraction_score_weight * attraction_score + config.density_score_weight * density_score
