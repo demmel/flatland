@@ -149,6 +149,49 @@ impl Config {
             },
         }
     }
+
+    pub fn mutate(self) -> Self {
+        Self {
+            air_adhesion: self.air_adhesion.mutate(),
+            air_cohesion: self.air_cohesion.mutate(),
+            air_density: self.air_density.mutate(),
+            air_to_water_saturation_threshold: mutate_f32(
+                self.air_to_water_saturation_threshold,
+                0.0,
+                1.0,
+            ),
+            saturation_diffusion_rate: mutate_f32(self.saturation_diffusion_rate, 0.0, 1.0),
+            soil_adhesion: self.soil_adhesion.mutate(),
+            soil_cohesion: self.soil_cohesion.mutate(),
+            soil_density: self.soil_density.mutate(),
+            soil_is_liquid_saturation_threshold: mutate_f32(
+                self.soil_is_liquid_saturation_threshold,
+                0.0,
+                1.0,
+            ),
+            water_adhesion: self.water_adhesion.mutate(),
+            water_cohesion: self.water_cohesion.mutate(),
+            water_density: self.water_density.mutate(),
+            water_to_air_saturation_threshold: mutate_f32(
+                self.water_to_air_saturation_threshold,
+                0.0,
+                1.0,
+            ),
+            neighbor_attraction_weights: mutate_f32_array(
+                self.neighbor_attraction_weights,
+                -1.0,
+                1.0,
+            ),
+            neighbor_density_weights: mutate_f32_array(self.neighbor_density_weights, -1.0, 1.0),
+            attraction_score_weight: mutate_f32(self.attraction_score_weight, 0.0, 1.0),
+            density_score_weight: mutate_f32(self.density_score_weight, 0.0, 1.0),
+        }
+    }
+}
+
+fn mutate_f32(f: f32, min: f32, max: f32) -> f32 {
+    let delta = (f * 0.05).max(f32::EPSILON);
+    (f + thread_rng().gen_range(-delta..=delta)).clamp(min, max)
 }
 
 fn crossover_f32_arrays(a: &[f32; 8], b: &[f32; 8]) -> [f32; 8] {
@@ -160,6 +203,13 @@ fn crossover_f32_arrays(a: &[f32; 8], b: &[f32; 8]) -> [f32; 8] {
         }
     }
     res
+}
+
+fn mutate_f32_array(mut f: [f32; 8], min: f32, max: f32) -> [f32; 8] {
+    for i in 0..f.len() {
+        f[i] = mutate_f32(f[i], min, max);
+    }
+    f
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -192,15 +242,21 @@ impl Polynomial {
                 .map(|i| match (self.coeffs.get(i), other.coeffs.get(i)) {
                     (None, None) => unreachable!(),
                     (None, Some(only)) | (Some(only), None) => *only,
-                    (Some(a), Some(b)) => {
-                        if rng.gen() {
-                            *a
-                        } else {
-                            *b
-                        }
-                    }
+                    (Some(a), Some(b)) => match rng.gen_range(0..3) {
+                        0 => *a,
+                        1 => *b,
+                        2 => (*a + *b) / 2.0,
+                        _ => unreachable!(),
+                    },
                 })
                 .collect(),
         )
+    }
+
+    fn mutate(mut self) -> Polynomial {
+        for f in self.coeffs.iter_mut() {
+            *f = mutate_f32(*f, -5.0, 5.0);
+        }
+        self
     }
 }

@@ -8,7 +8,10 @@ use show_image::{
     WindowOptions,
 };
 
-use roots::simulation::{config::Config, State};
+use roots::{
+    ranker::Ranker,
+    simulation::{config::Config, State},
+};
 
 #[show_image::main]
 fn main() -> Result<(), Box<dyn Error>> {
@@ -45,6 +48,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             competition_config.size.0 as u32 * 2 + 1,
             competition_config.size.1 as u32,
         );
+
         for (i, s) in state.iter().map(|s| s.to_image()).enumerate() {
             img.sub_image(
                 (competition_config.size.0 as u32 + 1) * i as u32,
@@ -128,20 +132,22 @@ pub struct CompeitionConfig {
     pub population_size: usize,
 }
 
-fn setup(competition_config: &CompeitionConfig) -> (CompetingConfigs, SelectedConfigs) {
+fn setup(competition_config: &CompeitionConfig) -> (Ranker<Config>, SelectedConfigs) {
     let mut rng = thread_rng();
 
-    let competitors = CompetingConfigs::new(
+    let competitors = Ranker::new(
         (0..competition_config.population_size)
             .map(|i| {
                 if i == 0 {
                     if let Ok(f) = File::open("winner.json") {
+                        println!("Loaded winner to position 0");
                         return serde_json::from_reader(f).unwrap();
                     }
                 }
                 Config::gen(&mut rng)
             })
             .collect(),
+        competition_config.population_size / 2,
     );
 
     let selected = SelectedConfigs(vec![competitors.current(), competitors.pivot()]);
@@ -150,20 +156,27 @@ fn setup(competition_config: &CompeitionConfig) -> (CompetingConfigs, SelectedCo
 
 fn rank_selected(
     ordering: Ordering,
-    competitors: &mut CompetingConfigs,
+    competitors: &mut Ranker<Config>,
     selected_competitors: &mut SelectedConfigs,
 ) {
     if !competitors.rank(ordering) {
         let competitors_inner = competitors.competitors();
 
-        serde_json::to_writer_pretty(File::create("winnder.json").unwrap(), &competitors_inner[0])
+        println!("Winner: {:?}", competitors_inner[0]);
+
+        serde_json::to_writer_pretty(File::create("winner.json").unwrap(), &competitors_inner[0])
             .unwrap();
 
         let mut rng = thread_rng();
         let mut new_competitors = Vec::with_capacity(competitors_inner.len());
 
         new_competitors.push(competitors_inner[0].clone());
-        for _ in 0..((competitors_inner.len() - 1) / 2) {
+        new_competitors.push(competitors_inner[0].clone().mutate());
+        for _ in 0..((competitors_inner.len() - 2) / 2) {
+            new_competitors.push(Config::gen(&mut rng));
+        }
+        // Put the crossovers at the end because they likely make the best pivots
+        for _ in 0..((competitors_inner.len() - 2) / 2) {
             let mut competitors =
                 competitors_inner[0..(competitors_inner.len() / 2)].choose_multiple(&mut rng, 2);
             let a = competitors.next().unwrap();
@@ -171,73 +184,13 @@ fn rank_selected(
             let c = a.crossover(b);
             new_competitors.push(c);
         }
-        for _ in 0..((competitors_inner.len()) / 2) {
-            new_competitors.push(Config::gen(&mut rng));
-        }
 
-        *competitors = CompetingConfigs::new(new_competitors);
+        *competitors = Ranker::new(new_competitors, competitors_inner.len() / 2);
     }
 
     *selected_competitors = SelectedConfigs(vec![competitors.current(), competitors.pivot()]);
+    println!("{selected_competitors:?}");
 }
 
+#[derive(Debug)]
 struct SelectedConfigs(Vec<usize>);
-
-struct CompetingConfigs {
-    i: usize,
-    j: usize,
-    remaining: Vec<(usize, usize)>,
-    competitors: Vec<Config>,
-}
-
-impl CompetingConfigs {
-    fn new(competitors: Vec<Config>) -> Self {
-        Self {
-            i: 0,
-            j: 0,
-            remaining: vec![(0, competitors.len() - 1)],
-            competitors,
-        }
-    }
-
-    fn current(&self) -> usize {
-        self.j
-    }
-
-    fn pivot(&self) -> usize {
-        self.remaining.last().unwrap().1
-    }
-
-    fn competitors(&self) -> &[Config] {
-        &self.competitors
-    }
-
-    fn rank(&mut self, ordering: Ordering) -> bool {
-        if matches!(ordering, Ordering::Greater) {
-            self.competitors.swap(self.i, self.j);
-            self.i += 1;
-        }
-        self.j += 1;
-        if self.j == self.pivot() {
-            let (start, end) = self.remaining.pop().unwrap();
-            self.competitors.swap(self.i, end);
-            if start + 1 < self.i {
-                self.remaining.push((start, self.i - 1));
-            }
-            if self.i + 1 < end {
-                self.remaining.push((self.i + 1, end));
-            }
-            if let Some((start, end)) = self.remaining.last() {
-                self.i = *start;
-                self.j = *start;
-                let mid = ((end + 1) - start) / 2;
-                self.competitors.swap(mid, *end);
-                true
-            } else {
-                false
-            }
-        } else {
-            true
-        }
-    }
-}
