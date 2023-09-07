@@ -32,7 +32,8 @@ impl State {
                         Element::Air => rng.gen_range(0.5..=0.75),
                         Element::Soil => rng.gen_range(0.5..=0.9),
                         Element::Water => 1.0,
-                    },
+                    }
+                    .into(),
                     element,
                 }
             }),
@@ -56,8 +57,11 @@ impl State {
     }
 
     pub fn update(&mut self) {
+        let start = std::time::Instant::now();
         self.update_positions();
         self.update_saturations();
+        let elapsed = std::time::Instant::now() - start;
+        println!("Update: {}s", elapsed.as_secs_f32());
     }
 
     fn update_positions(&mut self) {
@@ -74,11 +78,11 @@ impl State {
             .elements
             .windows(3)
             .map(|w| {
-                let total: f32 = w.iter().map(|t| t.saturation).sum();
+                let total: f32 = w.iter().map(|t| t.saturation.0).sum();
                 let count = w.iter().count();
                 let avg = total / count as f32;
                 let target = avg;
-                let diff = target - w.get(0, 0).unwrap().saturation;
+                let diff = target - w.get(0, 0).unwrap().saturation.0;
                 self.config.saturation_diffusion_rate * diff
             })
             .collect();
@@ -88,12 +92,12 @@ impl State {
         for (x, y) in GridEnumerator::new(&self.elements) {
             let t = self.elements.get_mut(x as isize, y as isize).unwrap();
             let s = &mut t.saturation;
-            *s = (*s + saturations.get(x as isize, y as isize).unwrap()).clamp(0.0, 1.0);
+            s.0 = (s.0 + saturations.get(x as isize, y as isize).unwrap()).clamp(0.0, 1.0);
             match t.element {
-                Element::Air if *s >= self.config.air_to_water_saturation_threshold => {
+                Element::Air if s.0 >= self.config.air_to_water_saturation_threshold => {
                     t.element = Element::Water
                 }
-                Element::Water if *s < self.config.water_to_air_saturation_threshold => {
+                Element::Water if s.0 < self.config.water_to_air_saturation_threshold => {
                     t.element = Element::Air
                 }
                 _ => {}
@@ -134,10 +138,10 @@ impl State {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Tile {
     element: Element,
-    saturation: f32,
+    saturation: OrderedFloat<f32>,
 }
 
 impl Tile {
@@ -149,9 +153,9 @@ impl Tile {
         let soil = Srgb::new(169u8, 113, 75).into_format::<f32>().into_linear();
 
         let color = match self.element {
-            Element::Air => air.mix(water, 0.5 * self.saturation),
-            Element::Soil => soil * (1.0 - 0.5 * self.saturation),
-            Element::Water => water.mix(air, 1.0 - self.saturation),
+            Element::Air => air.mix(water, 0.5 * self.saturation.0),
+            Element::Soil => soil * (1.0 - 0.5 * self.saturation.0),
+            Element::Water => water.mix(air, 1.0 - self.saturation.0),
         };
 
         color.into()
@@ -161,7 +165,7 @@ impl Tile {
         match self.element {
             Element::Air => Phase::Gas,
             Element::Soil => {
-                if self.saturation > config.soil_is_liquid_saturation_threshold {
+                if self.saturation.0 > config.soil_is_liquid_saturation_threshold {
                     Phase::Liquid
                 } else {
                     Phase::Solid
@@ -173,25 +177,25 @@ impl Tile {
 
     fn density(&self, config: &Config) -> f32 {
         match self.element {
-            Element::Air => config.air_density.eval(self.saturation),
-            Element::Soil => config.soil_density.eval(self.saturation),
-            Element::Water => config.water_density.eval(self.saturation),
+            Element::Air => config.air_density.eval(self.saturation.0),
+            Element::Soil => config.soil_density.eval(self.saturation.0),
+            Element::Water => config.water_density.eval(self.saturation.0),
         }
     }
 
     fn cohesion(&self, config: &Config) -> f32 {
         match self.element {
-            Element::Air => config.air_cohesion.eval(self.saturation),
-            Element::Soil => config.soil_cohesion.eval(self.saturation),
-            Element::Water => config.water_cohesion.eval(self.saturation),
+            Element::Air => config.air_cohesion.eval(self.saturation.0),
+            Element::Soil => config.soil_cohesion.eval(self.saturation.0),
+            Element::Water => config.water_cohesion.eval(self.saturation.0),
         }
     }
 
     fn adhesion(&self, config: &Config) -> f32 {
         match self.element {
-            Element::Air => config.air_adhesion.eval(self.saturation),
-            Element::Soil => config.soil_adhesion.eval(self.saturation),
-            Element::Water => config.water_adhesion.eval(self.saturation),
+            Element::Air => config.air_adhesion.eval(self.saturation.0),
+            Element::Soil => config.soil_adhesion.eval(self.saturation.0),
+            Element::Water => config.water_adhesion.eval(self.saturation.0),
         }
     }
 
@@ -218,7 +222,7 @@ fn position_score(config: &Config, elements: &Grid<Tile>, t: &Tile, x: isize, y:
             .flatten()
     };
 
-    let attraction_score = [
+    let neighbors = [
         select_other(x - 1, y - 1),
         select_other(x, y - 1),
         select_other(x + 1, y - 1),
@@ -227,45 +231,35 @@ fn position_score(config: &Config, elements: &Grid<Tile>, t: &Tile, x: isize, y:
         select_other(x - 1, y + 1),
         select_other(x, y + 1),
         select_other(x + 1, y + 1),
-    ]
-    .iter()
-    .zip(config.neighbor_attraction_weights)
-    .map(|(o, w)| {
-        w * match o {
-            Some(o) => t.attractive_force(o, config),
-            None => t.adhesion(config).powi(2),
-        }
-    })
-    .into_iter()
-    .sum::<f32>();
+    ];
 
-    let density_score = [
-        select_other(x - 1, y - 1),
-        select_other(x, y - 1),
-        select_other(x + 1, y - 1),
-        select_other(x - 1, y),
-        select_other(x + 1, y),
-        select_other(x - 1, y + 1),
-        select_other(x, y + 1),
-        select_other(x + 1, y + 1),
-    ]
-    .iter()
-    .zip(config.neighbor_density_weights)
-    .map(|(o, w)| {
-        w * match o {
-            Some(o) => {
-                (o.density(config) - t.density(config)) / (o.density(config) + t.density(config))
-            }
-            None => 0.0,
-        }
-    })
-    .into_iter()
-    .sum::<f32>();
+    let mut attraction_score = 0.0;
+    let mut density_score = 0.0;
+    for ((o, aw), dw) in neighbors
+        .iter()
+        .zip(config.neighbor_attraction_weights)
+        .zip(config.neighbor_density_weights)
+    {
+        attraction_score += aw
+            * match o {
+                Some(o) => t.attractive_force(o, config),
+                None => t.adhesion(config).powi(2),
+            };
+
+        density_score += dw
+            * match o {
+                Some(o) => {
+                    (o.density(config) - t.density(config))
+                        / (o.density(config) + t.density(config))
+                }
+                None => 0.0,
+            };
+    }
 
     config.attraction_score_weight * attraction_score + config.density_score_weight * density_score
 }
 
-#[derive(Debug, Clone, Copy, Ordinalize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Ordinalize, PartialEq, Eq, Hash)]
 enum Element {
     Air,
     Soil,
