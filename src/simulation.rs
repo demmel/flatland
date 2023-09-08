@@ -65,8 +65,9 @@ impl State {
     }
 
     fn update_positions(&mut self) {
-        let potential_moves = self.potential_moves();
-        let moves = reduce_potential_moves(&self.config, potential_moves, &self.elements);
+        let mut scorer = PairwiseTileScorer::new(self);
+        let potential_moves = self.potential_moves(&mut scorer);
+        let moves = reduce_potential_moves(&mut scorer, &self.config, potential_moves);
         self.elements = Grid::new(self.elements.width(), self.elements.height(), |x, y| {
             let (old_x, old_y) = moves.get(x as isize, y as isize).unwrap();
             self.elements.get(*old_x, *old_y).unwrap().clone()
@@ -105,7 +106,7 @@ impl State {
         }
     }
 
-    pub fn potential_moves(&self) -> Grid<PotentialMoves> {
+    pub fn potential_moves(&self, scorer: &mut PairwiseTileScorer<'_>) -> Grid<PotentialMoves> {
         let potential_move = self
             .elements
             .enumerate()
@@ -123,8 +124,15 @@ impl State {
                     })
                     .collect();
 
-                moves.sort_unstable_by_key(|(x, y)| {
-                    OrderedFloat(position_score(&self.config, &self.elements, t, *x, *y))
+                moves.sort_unstable_by_key(|(mx, my)| {
+                    OrderedFloat(position_score(
+                        scorer,
+                        &self.config,
+                        x as isize,
+                        y as isize,
+                        *mx,
+                        *my,
+                    ))
                 });
 
                 PotentialMoves::new(moves)
@@ -208,18 +216,67 @@ impl Tile {
     }
 }
 
-fn position_score(config: &Config, elements: &Grid<Tile>, t: &Tile, x: isize, y: isize) -> f32 {
-    let select_other = |ox: isize, oy: isize| {
-        let other = elements.get(ox, oy);
-        other
-            .map(|other| {
-                if t as *const _ == other as *const _ {
-                    elements.get(x, y)
-                } else {
-                    Some(other)
+pub struct PairwiseTileScorer<'a> {
+    state: &'a State,
+    scores: Vec<(f32, f32)>,
+}
+
+impl<'a> PairwiseTileScorer<'a> {
+    fn new(state: &'a State) -> Self {
+        let scores = vec![(0.0, 0.0); state.elements.width() * state.elements.height() * 25];
+        let mut this = Self { state, scores };
+
+        for (x, y) in GridEnumerator::new(&state.elements) {
+            for dy in -2..=2 {
+                for dx in -2..=2 {
+                    let i = this.index(x, y, dx, dy);
+                    let t = this.state.elements.get(x as isize, y as isize).unwrap();
+                    let other = this.state.elements.get(x as isize + dx, y as isize + dy);
+                    let (an, dn) = match other {
+                        Some(o) => {
+                            let od = o.density(&this.state.config);
+                            let td = t.density(&this.state.config);
+                            (
+                                t.attractive_force(o, &this.state.config),
+                                (od - td) / (od + td),
+                            )
+                        }
+                        None => (t.adhesion(&this.state.config).powi(2), 0.0),
+                    };
+                    let (a, d) = &mut this.scores[i];
+                    *a = an;
+                    *d = dn;
                 }
-            })
-            .flatten()
+            }
+        }
+
+        this
+    }
+
+    fn index(&self, x: usize, y: usize, dx: isize, dy: isize) -> usize {
+        (y * self.state.elements.width() + x) * 25 + (dy + 2) as usize * 5 + (dx + 2) as usize
+    }
+
+    fn get(&mut self, t: (isize, isize), other: (isize, isize)) -> (f32, f32) {
+        let i = self.index(t.0 as usize, t.1 as usize, other.0 - t.0, other.1 - t.1);
+        self.scores[i]
+    }
+}
+
+fn position_score(
+    scorer: &mut PairwiseTileScorer,
+    config: &Config,
+    tx: isize,
+    ty: isize,
+    x: isize,
+    y: isize,
+) -> f32 {
+    let select_other = |ox: isize, oy: isize| {
+        if tx == ox && ty == oy {
+            (x, y)
+        } else {
+            (ox, oy)
+        }
     };
 
     let neighbors = [
@@ -235,24 +292,14 @@ fn position_score(config: &Config, elements: &Grid<Tile>, t: &Tile, x: isize, y:
 
     let mut attraction_score = 0.0;
     let mut density_score = 0.0;
-    for (i, o) in neighbors.iter().enumerate() {
+    for (i, o) in neighbors.into_iter().enumerate() {
         let aw = config.neighbor_attraction_weights[i];
         let dw = config.neighbor_density_weights[i];
 
-        let (a, d) = match o {
-            Some(o) => {
-                let od = o.density(config);
-                let td = t.density(config);
-                (
-                    aw * t.attractive_force(o, config),
-                    dw * (od - td) / (od + td),
-                )
-            }
-            None => (aw * t.adhesion(config).powi(2), 0.0),
-        };
+        let (a, d) = scorer.get((tx, ty), o);
 
-        attraction_score += a;
-        density_score += d;
+        attraction_score += aw * a;
+        density_score += dw * d;
     }
 
     config.attraction_score_weight * attraction_score + config.density_score_weight * density_score

@@ -4,30 +4,27 @@ use ordered_float::OrderedFloat;
 
 use crate::grid::{Grid, GridEnumerator, GridLike};
 
-use super::{config::Config, position_score, Tile};
+use super::{config::Config, position_score, PairwiseTileScorer};
 
 pub fn reduce_potential_moves(
+    scorer: &mut PairwiseTileScorer<'_>,
     config: &Config,
     mut potential_moves: Grid<PotentialMoves>,
-    elements: &Grid<Tile>,
 ) -> Grid<(isize, isize)> {
-    let mut iters = 0;
     let mut resolutions = loop {
-        iters += 1;
         let mut conflicts = find_conflicts(&potential_moves);
         let found_conflicts =
-            resolve_conflicts(config, elements, &mut conflicts, &mut potential_moves);
+            resolve_conflicts(scorer, config, &mut conflicts, &mut potential_moves);
         if !found_conflicts {
             break conflicts;
         }
     };
-    // println!("Conflict iters: {iters}");
 
-    resolve_orphans(&mut resolutions, potential_moves);
+    resolve_orphans(&mut resolutions, &mut potential_moves);
 
     Grid::new(
-        elements.width(),
-        elements.height(),
+        potential_moves.width(),
+        potential_moves.height(),
         |x, y| match resolutions.get(x as isize, y as isize).unwrap() {
             MoveConflict::Resolved((old_x, old_y)) => (*old_x, *old_y),
             MoveConflict::None => {
@@ -42,7 +39,7 @@ pub fn reduce_potential_moves(
 
 fn resolve_orphans(
     resolutions: &mut Grid<MoveConflict>,
-    mut potential_moves: Grid<PotentialMoves>,
+    potential_moves: &mut Grid<PotentialMoves>,
 ) {
     let orphans: Vec<_> = potential_moves
         .enumerate()
@@ -105,8 +102,8 @@ pub fn find_conflicts(potential_moves: &Grid<PotentialMoves>) -> Grid<MoveConfli
 }
 
 pub fn resolve_conflicts(
+    scorer: &mut PairwiseTileScorer<'_>,
     config: &Config,
-    elements: &Grid<Tile>,
     conflicts: &mut Grid<MoveConflict>,
     potential_moves: &mut Grid<PotentialMoves>,
 ) -> bool {
@@ -121,11 +118,7 @@ pub fn resolve_conflicts(
                 .enumerate()
                 .max_by_key(|(_, (cx, cy))| {
                     OrderedFloat(position_score(
-                        config,
-                        elements,
-                        elements.get(*cx, *cy).unwrap(),
-                        x as isize,
-                        y as isize,
+                        scorer, config, *cx, *cy, x as isize, y as isize,
                     ))
                 })
                 .unwrap();
