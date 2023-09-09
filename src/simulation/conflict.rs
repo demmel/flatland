@@ -11,8 +11,13 @@ pub fn reduce_potential_moves(
     config: &Config,
     mut potential_moves: Grid<PotentialMoves>,
 ) -> Grid<(isize, isize)> {
+    let mut conflicts = Grid::new(
+        potential_moves.width(),
+        potential_moves.height(),
+        |_x, _y| MoveConflict::None,
+    );
     let mut resolutions = loop {
-        let mut conflicts = find_conflicts(&potential_moves);
+        find_conflicts(&mut conflicts, &potential_moves);
         let found_conflicts =
             resolve_conflicts(scorer, config, &mut conflicts, &mut potential_moves);
         if !found_conflicts {
@@ -84,12 +89,8 @@ fn resolve_orphans(
     }
 }
 
-pub fn find_conflicts(potential_moves: &Grid<PotentialMoves>) -> Grid<MoveConflict> {
-    let mut conflicts = Grid::new(
-        potential_moves.width(),
-        potential_moves.height(),
-        |_x, _y| MoveConflict::None,
-    );
+fn find_conflicts(conflicts: &mut Grid<MoveConflict>, potential_moves: &Grid<PotentialMoves>) {
+    conflicts.fill(MoveConflict::None);
     for (x, y, p) in potential_moves.enumerate() {
         if let Some((new_x, new_y)) = p.current() {
             conflicts
@@ -98,7 +99,6 @@ pub fn find_conflicts(potential_moves: &Grid<PotentialMoves>) -> Grid<MoveConfli
                 .push_move((x as isize, y as isize));
         }
     }
-    conflicts
 }
 
 pub fn resolve_conflicts(

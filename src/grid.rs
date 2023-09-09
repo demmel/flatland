@@ -39,6 +39,13 @@ impl<T> Grid<T> {
         }
     }
 
+    pub fn fill(&mut self, t: T)
+    where
+        T: Clone,
+    {
+        self.cells.fill(t)
+    }
+
     pub fn enumerate(&self) -> impl Iterator<Item = (usize, usize, &T)> {
         (0..self.height()).flat_map(move |y| {
             (0..self.width()).map(move |x| (x, y, self.get(x as isize, y as isize).unwrap()))
