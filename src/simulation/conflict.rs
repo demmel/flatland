@@ -7,7 +7,7 @@ use crate::grid::{Grid, GridEnumerator, GridLike};
 use super::{config::Config, position_score, PairwiseTileScorer};
 
 pub fn reduce_potential_moves(
-    scorer: &mut PairwiseTileScorer<'_>,
+    scorer: &mut PairwiseTileScorer,
     config: &Config,
     mut potential_moves: Grid<PotentialMoves>,
 ) -> Grid<(isize, isize)> {
@@ -102,7 +102,7 @@ pub fn find_conflicts(potential_moves: &Grid<PotentialMoves>) -> Grid<MoveConfli
 }
 
 pub fn resolve_conflicts(
-    scorer: &mut PairwiseTileScorer<'_>,
+    scorer: &mut PairwiseTileScorer,
     config: &Config,
     conflicts: &mut Grid<MoveConflict>,
     potential_moves: &mut Grid<PotentialMoves>,
