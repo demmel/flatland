@@ -13,7 +13,7 @@ use crate::grid::{Grid, GridEnumerator, GridLike};
 use self::{
     config::Config,
     conflict::{reduce_potential_moves, PotentialMoves},
-    score::{position_score, PairwiseTileScorer},
+    score::PairwiseTileScorer,
 };
 
 pub struct State {
@@ -127,8 +127,7 @@ impl State {
                     .collect();
 
                 moves.sort_unstable_by_key(|(mx, my)| {
-                    OrderedFloat(position_score(
-                        scorer,
+                    OrderedFloat(scorer.position_score(
                         &self.config,
                         x as isize,
                         y as isize,

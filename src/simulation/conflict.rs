@@ -4,7 +4,7 @@ use ordered_float::OrderedFloat;
 
 use crate::grid::{Grid, GridEnumerator, GridLike};
 
-use super::{config::Config, position_score, PairwiseTileScorer};
+use super::{config::Config, PairwiseTileScorer};
 
 pub fn reduce_potential_moves(
     scorer: &mut PairwiseTileScorer,
@@ -117,9 +117,7 @@ pub fn resolve_conflicts(
                 .iter()
                 .enumerate()
                 .max_by_key(|(_, (cx, cy))| {
-                    OrderedFloat(position_score(
-                        scorer, config, *cx, *cy, x as isize, y as isize,
-                    ))
+                    OrderedFloat(scorer.position_score(config, *cx, *cy, x as isize, y as isize))
                 })
                 .unwrap();
 
