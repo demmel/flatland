@@ -9,7 +9,7 @@ use super::{config::Config, PairwiseTileScorer};
 pub fn reduce_potential_moves(
     scorer: &mut PairwiseTileScorer,
     config: &Config,
-    mut potential_moves: Grid<PotentialMoves>,
+    potential_moves: &mut Grid<PotentialMoves>,
 ) -> Grid<(isize, isize)> {
     let mut conflicts = Grid::new(
         potential_moves.width(),
@@ -18,14 +18,13 @@ pub fn reduce_potential_moves(
     );
     let mut resolutions = loop {
         find_conflicts(&mut conflicts, &potential_moves);
-        let found_conflicts =
-            resolve_conflicts(scorer, config, &mut conflicts, &mut potential_moves);
+        let found_conflicts = resolve_conflicts(scorer, config, &mut conflicts, potential_moves);
         if !found_conflicts {
             break conflicts;
         }
     };
 
-    resolve_orphans(&mut resolutions, &mut potential_moves);
+    resolve_orphans(&mut resolutions, potential_moves);
 
     Grid::new(
         potential_moves.width(),
@@ -83,7 +82,6 @@ fn resolve_orphans(
         let [ssx, ssy] = slots[slot_idx];
         let [sx, sy]: [i32; 2] = [ssx.to_num(), ssy.to_num()];
         let [sx, sy] = [sx as isize, sy as isize];
-        potential_moves.get_mut(ox, oy).unwrap().push((sx, sy));
         *resolutions.get_mut(sx, sy).unwrap() = MoveConflict::Resolved((ox, oy));
         slots_spatial.remove(&[ssx, ssy], slot_idx);
     }
@@ -151,25 +149,23 @@ impl MoveConflict {
 
 #[derive(Debug)]
 pub struct PotentialMoves {
-    reverse_preferences: Vec<(isize, isize)>,
+    preferences: [Option<(isize, isize)>; 9],
+    current: usize,
 }
 
 impl PotentialMoves {
-    pub fn new(reverse_preferences: Vec<(isize, isize)>) -> PotentialMoves {
+    pub fn new(preferences: [Option<(isize, isize)>; 9]) -> PotentialMoves {
         Self {
-            reverse_preferences,
+            current: 0,
+            preferences,
         }
     }
 
     fn current(&self) -> Option<(isize, isize)> {
-        self.reverse_preferences.last().cloned()
+        self.preferences.get(self.current).cloned().flatten()
     }
 
     fn pop(&mut self) {
-        self.reverse_preferences.pop();
-    }
-
-    fn push(&mut self, m: (isize, isize)) {
-        self.reverse_preferences.push(m);
+        self.current += 1;
     }
 }

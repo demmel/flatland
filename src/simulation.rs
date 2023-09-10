@@ -2,6 +2,8 @@ pub mod config;
 pub mod conflict;
 mod score;
 
+use std::cmp::Reverse;
+
 use enum_ordinalize::Ordinalize;
 use image::{Rgb, RgbImage};
 use ordered_float::OrderedFloat;
@@ -19,6 +21,7 @@ use self::{
 pub struct State {
     pub elements: Grid<Tile>,
     pub config: Config,
+    potential_moves: Grid<PotentialMoves>,
 }
 
 impl State {
@@ -40,6 +43,7 @@ impl State {
                 }
             }),
             config,
+            potential_moves: Grid::new(width, height, |_, _| PotentialMoves::new([None; 9])),
         }
     }
 
@@ -68,8 +72,40 @@ impl State {
 
     fn update_positions(&mut self) {
         let mut scorer = PairwiseTileScorer::new(self);
-        let potential_moves = self.potential_moves(&mut scorer);
-        let moves = reduce_potential_moves(&mut scorer, &self.config, potential_moves);
+
+        for (x, y, t) in self.elements.enumerate() {
+            let mut moves = t
+                .phase(&self.config)
+                .allowed_moves()
+                .map(move |t| t.map(|(dx, dy)| (x as isize + dx, y as isize + dy)))
+                .map(|t| {
+                    t.filter(|(x, y)| {
+                        !(*x < 0
+                            || *y < 0
+                            || *x as usize >= self.elements.width()
+                            || *y as usize >= self.elements.height())
+                    })
+                });
+
+            moves.sort_unstable_by_key(|t| {
+                Reverse(t.map(|(mx, my)| {
+                    OrderedFloat(scorer.position_score(
+                        &self.config,
+                        x as isize,
+                        y as isize,
+                        mx,
+                        my,
+                    ))
+                }))
+            });
+
+            *self
+                .potential_moves
+                .get_mut(x as isize, y as isize)
+                .unwrap() = PotentialMoves::new(moves);
+        }
+
+        let moves = reduce_potential_moves(&mut scorer, &self.config, &mut self.potential_moves);
         self.elements = Grid::new(self.elements.width(), self.elements.height(), |x, y| {
             let (old_x, old_y) = moves.get(x as isize, y as isize).unwrap();
             self.elements.get(*old_x, *old_y).unwrap().clone()
@@ -106,44 +142,6 @@ impl State {
                 _ => {}
             }
         }
-    }
-
-    pub fn potential_moves(&self, scorer: &mut PairwiseTileScorer) -> Grid<PotentialMoves> {
-        let potential_move = self
-            .elements
-            .enumerate()
-            .map(|(x, y, t)| {
-                let mut moves: Vec<_> = t
-                    .phase(&self.config)
-                    .allowed_moves()
-                    .into_iter()
-                    .map(move |(dx, dy)| (x as isize + dx, y as isize + dy))
-                    .filter(|&(x, y)| {
-                        !(x < 0
-                            || y < 0
-                            || x as usize >= self.elements.width()
-                            || y as usize >= self.elements.height())
-                    })
-                    .collect();
-
-                moves.sort_unstable_by_key(|(mx, my)| {
-                    OrderedFloat(scorer.position_score(
-                        &self.config,
-                        x as isize,
-                        y as isize,
-                        *mx,
-                        *my,
-                    ))
-                });
-
-                PotentialMoves::new(moves)
-            })
-            .collect();
-        Grid::from_cells(
-            self.elements.width(),
-            self.elements.height(),
-            potential_move,
-        )
     }
 }
 
@@ -231,19 +229,29 @@ enum Phase {
 }
 
 impl Phase {
-    fn allowed_moves(&self) -> Vec<(isize, isize)> {
+    fn allowed_moves(&self) -> [Option<(isize, isize)>; 9] {
         match self {
-            Phase::Solid => vec![(0, -1), (0, 0), (-1, 1), (0, 1), (1, 1)],
-            Phase::Liquid | Phase::Gas => vec![
-                (-1, -1),
-                (0, -1),
-                (1, -1),
-                (-1, 0),
-                (0, 0),
-                (1, 0),
-                (-1, 1),
-                (0, 1),
-                (1, 1),
+            Phase::Solid => [
+                Some((0, -1)),
+                Some((0, 0)),
+                Some((-1, 1)),
+                Some((0, 1)),
+                Some((1, 1)),
+                None,
+                None,
+                None,
+                None,
+            ],
+            Phase::Liquid | Phase::Gas => [
+                Some((-1, -1)),
+                Some((0, -1)),
+                Some((1, -1)),
+                Some((-1, 0)),
+                Some((0, 0)),
+                Some((1, 0)),
+                Some((-1, 1)),
+                Some((0, 1)),
+                Some((1, 1)),
             ],
         }
     }
