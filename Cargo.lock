@@ -1678,6 +1678,7 @@ dependencies = [
  "ordered-float",
  "palette",
  "rand",
+ "rayon",
  "serde",
  "serde_json",
  "show-image",

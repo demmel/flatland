@@ -1,78 +1,77 @@
 {
   "air_adhesion": {
     "coeffs": [
-      0.14537796,
-      0.34923398
+      0.05770552,
+      0.4476264
     ]
   },
   "air_cohesion": {
     "coeffs": [
-      0.7426577,
-      0.7132213
+      0.50193536
     ]
   },
   "air_density": {
     "coeffs": [
-      0.52031577
+      0.5804965
     ]
   },
-  "air_to_water_saturation_threshold": 0.557007,
-  "saturation_diffusion_rate": 0.010072976,
+  "air_to_water_saturation_threshold": 0.9812767,
+  "saturation_diffusion_rate": 0.63922125,
   "soil_adhesion": {
     "coeffs": [
-      0.12941845,
-      1.0170025
+      0.2786991
     ]
   },
   "soil_cohesion": {
     "coeffs": [
-      0.18201002
+      0.66948134
     ]
   },
   "soil_density": {
     "coeffs": [
-      0.62684315
+      0.39778,
+      0.44674826
     ]
   },
-  "soil_is_liquid_saturation_threshold": 0.8514967,
   "water_adhesion": {
     "coeffs": [
-      0.40179074,
-      0.97703505
+      0.32908773,
+      0.8227588
     ]
   },
   "water_cohesion": {
     "coeffs": [
-      0.6426296,
-      0.7635496
+      0.24861008,
+      0.39770806
     ]
   },
   "water_density": {
     "coeffs": [
-      0.54486626
+      0.12497342,
+      0.3696701
     ]
   },
-  "water_to_air_saturation_threshold": 0.19093123,
+  "water_to_air_saturation_threshold": 0.65927804,
   "neighbor_attraction_weights": [
-    0.31674442,
-    -0.57646924,
-    -0.102332234,
-    -0.59253997,
-    -0.3975786,
-    0.75987506,
-    -0.9374234,
-    -0.3658352
+    -0.16544926,
+    0.1938299,
+    -0.53951806,
+    0.79054356,
+    0.75420785,
+    -0.53573626,
+    -0.96831536,
+    0.35981476
   ],
   "neighbor_density_weights": [
-    -0.63469875,
-    0.1632734,
-    0.5284898,
-    -0.702951,
-    -0.22200114,
-    -0.54239357,
-    0.46694064,
-    -0.8143079
+    -0.32665843,
+    -0.20909965,
+    0.37659824,
+    0.745564,
+    0.34611857,
+    0.8056052,
+    0.99220085,
+    -0.6718724
   ],
-  "attraction_score_weight": 0.13893302,
-  "density_score_weight": 0.58939946
+  "attraction_score_weight": 0.49738896,
+  "density_score_weight": 0.46150815
 }

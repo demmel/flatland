@@ -67,7 +67,7 @@ impl State {
         self.update_positions();
         self.update_saturations();
         let elapsed = std::time::Instant::now() - start;
-        println!("Update: {}s", elapsed.as_secs_f32());
+        // println!("Update: {}s", elapsed.as_secs_f32());
     }
 
     fn update_positions(&mut self) {
@@ -201,10 +201,18 @@ impl Tile {
             self.adhesion(config) * other.adhesion(config)
         }
     }
+
+    pub fn element(&self) -> Element {
+        self.element
+    }
+
+    pub fn saturation(&self) -> OrderedFloat<f32> {
+        self.saturation
+    }
 }
 
 #[derive(Debug, Clone, Copy, Ordinalize, PartialEq, Eq, Hash)]
-enum Element {
+pub enum Element {
     Air,
     Soil,
     Water,

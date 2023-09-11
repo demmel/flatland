@@ -39,6 +39,10 @@ impl<T> Grid<T> {
         }
     }
 
+    pub fn iter(&self) -> impl Iterator<Item = &T> {
+        self.cells.iter()
+    }
+
     pub fn fill(&mut self, t: T)
     where
         T: Clone,

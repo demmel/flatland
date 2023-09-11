@@ -1,4 +1,4 @@
-use std::{error::Error, sync::mpsc::TryRecvError};
+use std::{error::Error, fs::File, sync::mpsc::TryRecvError};
 
 use show_image::{
     create_window,
@@ -10,7 +10,8 @@ use roots::simulation::{config::Config, State};
 
 #[show_image::main]
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut state: State = State::gen(Config::default(), 320, 180);
+    let config = serde_json::from_reader(File::open("config.json")?).unwrap_or(Config::default());
+    let mut state: State = State::gen(config, 320, 180);
     let mut running: bool = false;
 
     let window = create_window(

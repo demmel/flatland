@@ -36,8 +36,8 @@ pub fn reduce_potential_moves(
             break conflicts;
         }
     };
-    println!("Conflict resolution iterations: {iters}");
-    println!("Max in conflict: {max_in_conflict}");
+    // println!("Conflict resolution iterations: {iters}");
+    // println!("Max in conflict: {max_in_conflict}");
 
     resolve_orphans(&mut resolutions, potential_moves);
 
@@ -62,7 +62,7 @@ fn resolve_orphans(
         .map(|(x, y, _p)| (x as isize, y as isize))
         .collect();
 
-    println!("Orphans: {}", orphans.len());
+    // println!("Orphans: {}", orphans.len());
 
     let slots: Vec<_> = resolutions
         .enumerate()
