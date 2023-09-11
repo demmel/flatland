@@ -2,8 +2,6 @@ pub mod config;
 pub mod conflict;
 mod score;
 
-use std::cmp::Reverse;
-
 use enum_ordinalize::Ordinalize;
 use image::{Rgb, RgbImage};
 use ordered_float::OrderedFloat;
@@ -15,7 +13,7 @@ use crate::grid::{Grid, GridEnumerator, GridLike};
 use self::{
     config::Config,
     conflict::{reduce_potential_moves, PotentialMoves},
-    score::PairwiseTileScorer,
+    score::{PairwiseTileScorer, WINDOW_SIZE_OV_2},
 };
 
 pub struct State {
@@ -43,7 +41,7 @@ impl State {
                 }
             }),
             config,
-            potential_moves: Grid::new(width, height, |_, _| PotentialMoves::new([None; 9])),
+            potential_moves: Grid::new(width, height, |_, _| PotentialMoves::new(vec![])),
         }
     }
 
@@ -73,30 +71,22 @@ impl State {
     fn update_positions(&mut self) {
         let mut scorer = PairwiseTileScorer::new(self);
 
-        for (x, y, t) in self.elements.enumerate() {
-            let mut moves = t
-                .phase(&self.config)
-                .allowed_moves()
-                .map(move |t| t.map(|(dx, dy)| (x as isize + dx, y as isize + dy)))
-                .map(|t| {
-                    t.filter(|(x, y)| {
-                        !(*x < 0
-                            || *y < 0
-                            || *x as usize >= self.elements.width()
-                            || *y as usize >= self.elements.height())
-                    })
-                });
+        for (x, y) in GridEnumerator::new(&self.elements) {
+            let mut moves: Vec<_> = (-(WINDOW_SIZE_OV_2 - 1)..=(WINDOW_SIZE_OV_2 - 1))
+                .flat_map(|dy| {
+                    (-(WINDOW_SIZE_OV_2 - 1)..=(WINDOW_SIZE_OV_2 - 1)).map(move |dx| (dx, dy))
+                })
+                .map(|(dx, dy)| (x as isize + dx, y as isize + dy))
+                .filter(|(x, y)| {
+                    !(*x < 0
+                        || *y < 0
+                        || *x as usize >= self.elements.width()
+                        || *y as usize >= self.elements.height())
+                })
+                .collect();
 
-            moves.sort_unstable_by_key(|t| {
-                Reverse(t.map(|(mx, my)| {
-                    OrderedFloat(scorer.position_score(
-                        &self.config,
-                        x as isize,
-                        y as isize,
-                        mx,
-                        my,
-                    ))
-                }))
+            moves.sort_unstable_by_key(|(mx, my)| {
+                OrderedFloat(scorer.position_score(&self.config, x as isize, y as isize, *mx, *my))
             });
 
             *self
@@ -168,20 +158,6 @@ impl Tile {
         color.into()
     }
 
-    fn phase(&self, config: &Config) -> Phase {
-        match self.element {
-            Element::Air => Phase::Gas,
-            Element::Soil => {
-                if self.saturation.0 > config.soil_is_liquid_saturation_threshold {
-                    Phase::Liquid
-                } else {
-                    Phase::Solid
-                }
-            }
-            Element::Water => Phase::Liquid,
-        }
-    }
-
     fn density(&self, config: &Config) -> f32 {
         match self.element {
             Element::Air => config.air_density.eval(self.saturation.0),
@@ -220,39 +196,4 @@ enum Element {
     Air,
     Soil,
     Water,
-}
-
-enum Phase {
-    Solid,
-    Liquid,
-    Gas,
-}
-
-impl Phase {
-    fn allowed_moves(&self) -> [Option<(isize, isize)>; 9] {
-        match self {
-            Phase::Solid => [
-                Some((0, -1)),
-                Some((0, 0)),
-                Some((-1, 1)),
-                Some((0, 1)),
-                Some((1, 1)),
-                None,
-                None,
-                None,
-                None,
-            ],
-            Phase::Liquid | Phase::Gas => [
-                Some((-1, -1)),
-                Some((0, -1)),
-                Some((1, -1)),
-                Some((-1, 0)),
-                Some((0, 0)),
-                Some((1, 0)),
-                Some((-1, 1)),
-                Some((0, 1)),
-                Some((1, 1)),
-            ],
-        }
-    }
 }

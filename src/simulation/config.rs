@@ -11,7 +11,6 @@ pub struct Config {
     pub soil_adhesion: Polynomial,
     pub soil_cohesion: Polynomial,
     pub soil_density: Polynomial,
-    pub soil_is_liquid_saturation_threshold: f32,
     pub water_adhesion: Polynomial,
     pub water_cohesion: Polynomial,
     pub water_density: Polynomial,
@@ -28,7 +27,6 @@ impl Default for Config {
             air_to_water_saturation_threshold: 0.9,
             air_density: Polynomial::new(vec![0.5, -0.5]),
             saturation_diffusion_rate: 0.01,
-            soil_is_liquid_saturation_threshold: 0.9,
             soil_density: Polynomial::new(vec![10.0, -5.0]),
             water_to_air_saturation_threshold: 0.5,
             water_density: Polynomial::new(vec![0.5, 0.5]),
@@ -61,7 +59,6 @@ impl Config {
             air_to_water_saturation_threshold: rng.gen(),
             air_density: Polynomial::new((0..rng.gen_range(1..3)).map(|_| rng.gen()).collect()),
             saturation_diffusion_rate: rng.gen(),
-            soil_is_liquid_saturation_threshold: rng.gen(),
             soil_density: Polynomial::new((0..rng.gen_range(1..3)).map(|_| rng.gen()).collect()),
             water_to_air_saturation_threshold: rng.gen(),
             water_density: Polynomial::new((0..rng.gen_range(1..3)).map(|_| rng.gen()).collect()),
@@ -116,11 +113,6 @@ impl Config {
             soil_adhesion: self.soil_adhesion.crossover(&other.soil_adhesion),
             soil_cohesion: self.soil_cohesion.crossover(&other.soil_cohesion),
             soil_density: self.soil_density.crossover(&other.soil_density),
-            soil_is_liquid_saturation_threshold: if rng.gen() {
-                self.soil_is_liquid_saturation_threshold
-            } else {
-                other.soil_is_liquid_saturation_threshold
-            },
             water_adhesion: self.water_adhesion.crossover(&other.water_adhesion),
             water_cohesion: self.water_cohesion.crossover(&other.water_cohesion),
             water_density: self.water_density.crossover(&other.water_density),
@@ -164,11 +156,6 @@ impl Config {
             soil_adhesion: self.soil_adhesion.mutate(),
             soil_cohesion: self.soil_cohesion.mutate(),
             soil_density: self.soil_density.mutate(),
-            soil_is_liquid_saturation_threshold: mutate_f32(
-                self.soil_is_liquid_saturation_threshold,
-                0.0,
-                1.0,
-            ),
             water_adhesion: self.water_adhesion.mutate(),
             water_cohesion: self.water_cohesion.mutate(),
             water_density: self.water_density.mutate(),

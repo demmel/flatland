@@ -2,6 +2,10 @@ use crate::grid::GridLike;
 
 use super::{config::Config, State};
 
+pub const WINDOW_SIZE: isize = 7;
+pub const WINDOW_SIZE_OV_2: isize = WINDOW_SIZE / 2;
+pub const BUCKET_SIZE: usize = (WINDOW_SIZE.pow(2) as usize) / 2 + 1;
+
 pub struct PairwiseTileScorer {
     width: usize,
     scores: Vec<(f32, f32)>,
@@ -9,19 +13,21 @@ pub struct PairwiseTileScorer {
 
 impl PairwiseTileScorer {
     pub fn new(state: &State) -> Self {
-        let scores =
-            vec![(0.0, 0.0); (state.elements.width() + 2) * (state.elements.height() + 2) * 13];
-        let mut this = Self {
-            width: state.elements.width() + 2,
-            scores,
-        };
+        let width = state.elements.width() + WINDOW_SIZE_OV_2 as usize;
+        let height = state.elements.height() + WINDOW_SIZE_OV_2 as usize;
+        let scores = vec![(0.0, 0.0); width * height * BUCKET_SIZE];
+        let mut this = Self { width, scores };
 
-        for y in 0..(state.elements.height() + 2) {
-            for x in 0..this.width {
-                for dy in 0..=2 {
-                    for dx in if dy == 0 { 0..=2 } else { -2..=2 } {
-                        let x = x as isize - 2;
-                        let y = y as isize - 2;
+        for y in 0..height {
+            for x in 0..width {
+                for dy in 0..=(WINDOW_SIZE_OV_2) {
+                    for dx in if dy == 0 {
+                        0..=(WINDOW_SIZE_OV_2)
+                    } else {
+                        -(WINDOW_SIZE_OV_2)..=(WINDOW_SIZE_OV_2)
+                    } {
+                        let x = x as isize - (WINDOW_SIZE_OV_2);
+                        let y = y as isize - (WINDOW_SIZE_OV_2);
                         let i = this.index(x, y, dx, dy);
                         let t = state.elements.get(x as isize, y as isize);
                         let other = state.elements.get(x as isize + dx, y as isize + dy);
@@ -36,9 +42,11 @@ impl PairwiseTileScorer {
                                 (t.attractive_force(o, &state.config), (od - td) / (od + td))
                             }
                         };
+                        let distance_penalty =
+                            (WINDOW_SIZE - (dx.abs() + dy)) as f32 / WINDOW_SIZE as f32;
                         let (a, d) = &mut this.scores[i];
-                        *a = an;
-                        *d = dn;
+                        *a = an * distance_penalty;
+                        *d = dn * distance_penalty;
                     }
                 }
             }
@@ -48,10 +56,11 @@ impl PairwiseTileScorer {
     }
 
     fn index(&self, x: isize, y: isize, dx: isize, dy: isize) -> usize {
-        let x = (x + 2) as usize;
-        let y = (y + 2) as usize;
+        let x = (x + WINDOW_SIZE_OV_2) as usize;
+        let y = (y + WINDOW_SIZE_OV_2) as usize;
 
-        let i = (y * self.width + x) * 13 + dy as usize * 5 + dx as usize;
+        let i =
+            (y * self.width + x) * BUCKET_SIZE + dy as usize * WINDOW_SIZE as usize + dx as usize;
 
         i
     }
