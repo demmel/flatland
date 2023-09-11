@@ -2,6 +2,8 @@ pub mod config;
 pub mod conflict;
 mod score;
 
+use std::cmp::Reverse;
+
 use enum_ordinalize::Ordinalize;
 use image::{Rgb, RgbImage};
 use ordered_float::OrderedFloat;
@@ -72,27 +74,7 @@ impl State {
         let mut scorer = PairwiseTileScorer::new(self);
 
         for (x, y) in GridEnumerator::new(&self.elements) {
-            let mut moves: Vec<_> = (-(WINDOW_SIZE_OV_2 - 1)..=(WINDOW_SIZE_OV_2 - 1))
-                .flat_map(|dy| {
-                    (-(WINDOW_SIZE_OV_2 - 1)..=(WINDOW_SIZE_OV_2 - 1)).map(move |dx| (dx, dy))
-                })
-                .map(|(dx, dy)| (x as isize + dx, y as isize + dy))
-                .filter(|(x, y)| {
-                    !(*x < 0
-                        || *y < 0
-                        || *x as usize >= self.elements.width()
-                        || *y as usize >= self.elements.height())
-                })
-                .collect();
-
-            moves.sort_unstable_by_key(|(mx, my)| {
-                OrderedFloat(scorer.position_score(&self.config, x as isize, y as isize, *mx, *my))
-            });
-
-            *self
-                .potential_moves
-                .get_mut(x as isize, y as isize)
-                .unwrap() = PotentialMoves::new(moves);
+            self.update_potential_moves(x, y, &scorer);
         }
 
         let moves = reduce_potential_moves(&mut scorer, &self.config, &mut self.potential_moves);
@@ -100,6 +82,36 @@ impl State {
             let (old_x, old_y) = moves.get(x as isize, y as isize).unwrap();
             self.elements.get(*old_x, *old_y).unwrap().clone()
         });
+    }
+
+    fn update_potential_moves(&mut self, x: usize, y: usize, scorer: &PairwiseTileScorer) {
+        let mut moves: Vec<_> = (-(WINDOW_SIZE_OV_2 - 1)..=(WINDOW_SIZE_OV_2 - 1))
+            .flat_map(|dy| {
+                (-(WINDOW_SIZE_OV_2 - 1)..=(WINDOW_SIZE_OV_2 - 1)).map(move |dx| (dx, dy))
+            })
+            .map(|(dx, dy)| (x as isize + dx, y as isize + dy))
+            .filter(|(x, y)| {
+                !(*x < 0
+                    || *y < 0
+                    || *x as usize >= self.elements.width()
+                    || *y as usize >= self.elements.height())
+            })
+            .collect();
+
+        moves.sort_unstable_by_key(|(mx, my)| {
+            Reverse(OrderedFloat(scorer.position_score(
+                &self.config,
+                x as isize,
+                y as isize,
+                *mx,
+                *my,
+            )))
+        });
+
+        *self
+            .potential_moves
+            .get_mut(x as isize, y as isize)
+            .unwrap() = PotentialMoves::new(moves);
     }
 
     fn update_saturations(&mut self) {

@@ -2,7 +2,7 @@ use crate::grid::GridLike;
 
 use super::{config::Config, State};
 
-pub const WINDOW_SIZE: isize = 7;
+pub const WINDOW_SIZE: isize = 5;
 pub const WINDOW_SIZE_OV_2: isize = WINDOW_SIZE / 2;
 pub const BUCKET_SIZE: usize = (WINDOW_SIZE.pow(2) as usize) / 2 + 1;
 
@@ -42,11 +42,9 @@ impl PairwiseTileScorer {
                                 (t.attractive_force(o, &state.config), (od - td) / (od + td))
                             }
                         };
-                        let distance_penalty =
-                            (WINDOW_SIZE - (dx.abs() + dy)) as f32 / WINDOW_SIZE as f32;
                         let (a, d) = &mut this.scores[i];
-                        *a = an * distance_penalty;
-                        *d = dn * distance_penalty;
+                        *a = an;
+                        *d = dn;
                     }
                 }
             }
@@ -73,7 +71,7 @@ impl PairwiseTileScorer {
             self.scores[self.index(t.0, t.1, dx, dy)]
         } else {
             let (a, d) = self.scores[self.index(other.0, other.1, -dx, -dy)];
-            (a, -1.0 * d)
+            (a, -d)
         }
     }
 
@@ -109,7 +107,12 @@ impl PairwiseTileScorer {
             density_score += dw * d;
         }
 
+        let dx = x - tx;
+        let dy = y - ty;
+        let dist = dx.abs().max(dy.abs());
+
         config.attraction_score_weight * attraction_score
             + config.density_score_weight * density_score
+            - (0.0001 * dist as f32)
     }
 }

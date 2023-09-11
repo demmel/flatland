@@ -25,11 +25,11 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             air_to_water_saturation_threshold: 0.9,
-            air_density: Polynomial::new(vec![0.5, -0.5]),
+            air_density: Polynomial::new(vec![0.1, -0.1]),
             saturation_diffusion_rate: 0.01,
-            soil_density: Polynomial::new(vec![10.0, -5.0]),
+            soil_density: Polynomial::new(vec![1.0, -0.1]),
             water_to_air_saturation_threshold: 0.5,
-            water_density: Polynomial::new(vec![0.5, 0.5]),
+            water_density: Polynomial::new(vec![0.5, 0.1]),
             air_adhesion: Polynomial::new(vec![0.1, 0.05]),
             air_cohesion: Polynomial::new(vec![0.1, 0.4]),
             soil_adhesion: Polynomial::new(vec![0.0, 3.25, -2.5]),
