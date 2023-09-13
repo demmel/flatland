@@ -143,6 +143,8 @@ fn setup(competition_config: &CompeitionConfig) -> (Ranker<Config>, SelectedConf
                         println!("Loaded winner to position 0");
                         return serde_json::from_reader(f).unwrap();
                     }
+                } else if i == 1 {
+                    return Config::default();
                 }
                 Config::gen(&mut rng)
             })
@@ -171,7 +173,7 @@ fn rank_selected(
         let mut new_competitors = Vec::with_capacity(competitors_inner.len());
 
         new_competitors.push(competitors_inner[0].clone());
-        new_competitors.push(competitors_inner[0].clone().mutate());
+        new_competitors.push(competitors_inner[0].clone().mutate(0.1));
         for _ in 0..((competitors_inner.len() - 2) / 2) {
             new_competitors.push(Config::gen(&mut rng));
         }

@@ -1,13 +1,15 @@
-use std::{cmp::Reverse, error::Error, fs::File};
+use std::{collections::BinaryHeap, error::Error, fs::File};
 
 use ordered_float::OrderedFloat;
 use rand::prelude::*;
 use rayon::prelude::*;
 
 use roots::{
-    grid::GridLike,
+    grid::{GridEnumerator, GridLike},
     simulation::{config::Config, Element, State},
 };
+use serde::{Deserialize, Serialize};
+use statistical::{mean, standard_deviation};
 
 #[show_image::main]
 fn main() -> Result<(), Box<dyn Error>> {
@@ -20,55 +22,152 @@ fn main() -> Result<(), Box<dyn Error>> {
                     println!("Loaded winner to position 0");
                     return serde_json::from_reader(f).unwrap();
                 }
+            } else if i == 1 {
+                return Config::default();
             }
             Config::gen(&mut rng)
         })
         .collect();
 
+    let mut elites = if let Ok(file) = File::open("elites.json") {
+        serde_json::from_reader(file).unwrap()
+    } else {
+        BinaryHeap::new()
+    };
     loop {
-        let mut scores: Vec<(_, f32)> = configs
-            .par_iter()
-            .map(|c| {
-                let mut state = State::gen(c.clone(), 64, 64);
-                (
-                    c,
-                    (0..1000)
-                        .map(|_| {
-                            state.update();
-                            score_state(&state)
-                        })
-                        .sum(),
-                )
-            })
+        let config_scores = score_configs(&configs);
+        let scores: Vec<_> = config_scores
+            .iter()
+            .take(config_scores.len() / 2)
+            .map(|x| x.1 .0)
             .collect();
 
-        scores.sort_unstable_by_key(|(_, s)| Reverse(OrderedFloat(*s)));
+        println!("Winner: {:?}", scores[0]);
+        serde_json::to_writer_pretty(File::create("winner.json").unwrap(), &config_scores[0].0)
+            .unwrap();
 
-        println!("Winner: {:?}", scores[0].1);
+        let mu = mean(&scores);
+        let sigma = standard_deviation(&scores, Some(mu));
+        println!("Top 50% - Mu: {mu} Sigma: {sigma}");
 
-        serde_json::to_writer_pretty(File::create("winner.json").unwrap(), &scores[0].0).unwrap();
-
-        let mut rng = thread_rng();
-        let mut new_configs = Vec::with_capacity(scores.len());
-
-        new_configs.push(scores[0].0.clone());
-        new_configs.push(scores[0].0.clone().mutate());
-        for _ in 0..((scores.len() - 2) / 2) {
-            new_configs.push(Config::gen(&mut rng));
+        if sigma / mu < 0.05 {
+            println!("Diversify");
+            configs = next_diversify_generation(&mut elites, &config_scores);
+        } else {
+            println!("Incremental");
+            configs = next_incremental_generation(&config_scores);
         }
-        for _ in 0..((scores.len() - 2) / 2) {
-            let mut competitors = scores[0..(scores.len() / 2)].choose_multiple(&mut rng, 2);
-            let a = competitors.next().unwrap().0;
-            let b = competitors.next().unwrap().0;
-            let c = a.crossover(b);
-            new_configs.push(c);
-        }
-
-        configs = new_configs;
     }
 }
 
-fn score_state(state: &State) -> f32 {
+#[derive(Clone, Serialize, Deserialize)]
+struct ConfigScore(Config, OrderedFloat<f32>);
+
+impl PartialEq for ConfigScore {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl Eq for ConfigScore {}
+
+impl PartialOrd for ConfigScore {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        other.1.partial_cmp(&self.1)
+    }
+}
+
+impl Ord for ConfigScore {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+
+fn next_diversify_generation(
+    elites: &mut BinaryHeap<ConfigScore>,
+    config_scores: &[ConfigScore],
+) -> Vec<Config> {
+    elites.push(config_scores[0].clone());
+    if elites.len() > 16 {
+        elites.pop();
+    }
+    serde_json::to_writer_pretty(File::create("elites.json").unwrap(), &elites).unwrap();
+    let mut rng: ThreadRng = thread_rng();
+    let mut new_configs = Vec::with_capacity(config_scores.len());
+
+    if elites.len() < 4 {
+        for _ in 0..(config_scores.len()) {
+            new_configs.push(Config::gen(&mut rng));
+        }
+    } else {
+        let sorted_elites = elites.clone().into_sorted_vec();
+        new_configs.extend(
+            sorted_elites
+                .choose_multiple_weighted(&mut rng, 2, |cs| cs.1 .0)
+                .unwrap()
+                .map(|x| x.0.clone()),
+        );
+        for _ in 0..(config_scores.len() - 2) {
+            new_configs.push(Config::gen(&mut rng));
+        }
+    }
+    new_configs
+}
+
+fn next_incremental_generation(configs_scores: &[ConfigScore]) -> Vec<Config> {
+    let mut rng: ThreadRng = thread_rng();
+    let mut new_configs = Vec::with_capacity(configs_scores.len());
+
+    new_configs.push(configs_scores[0].0.clone());
+    new_configs.extend(
+        configs_scores
+            .choose_multiple_weighted(
+                &mut rng,
+                (configs_scores.len() - 2) / 2,
+                |ConfigScore(_, s)| s.0,
+            )
+            .unwrap()
+            .map(|x| x.0.clone().mutate(0.1)),
+    );
+    new_configs.push(Config::gen(&mut rng));
+    for _ in 0..((configs_scores.len() - 2) / 2) {
+        let mut competitors = configs_scores
+            .choose_multiple_weighted(&mut rng, 2, |ConfigScore(_, s)| s.0)
+            .unwrap();
+        let a = competitors.next().unwrap().0.clone();
+        let b = competitors.next().unwrap().0.clone();
+        let c = a.crossover(&b);
+        new_configs.push(c);
+    }
+
+    new_configs
+}
+
+fn score_configs(configs: &[Config]) -> Vec<ConfigScore> {
+    let mut config_score: Vec<ConfigScore> = configs
+        .par_iter()
+        .map(|c| {
+            let mut state = State::gen(c.clone(), 64, 64);
+            ConfigScore(
+                c.clone(),
+                (0..1000)
+                    .map(|_| {
+                        let old_state = state.clone();
+                        state.update();
+                        score_state(&old_state, &state)
+                    })
+                    .sum::<f32>()
+                    .into(),
+            )
+        })
+        .collect();
+
+    config_score.sort_unstable_by_key(|cs| cs.clone());
+
+    config_score
+}
+
+fn score_state(old_state: &State, state: &State) -> f32 {
     let element_count = state.elements.iter().count();
 
     let avg_saturation =
@@ -133,32 +232,189 @@ fn score_state(state: &State) -> f32 {
                 w.get(1, 1).map(|t| t.element()),
             ) {
                 (
-                    Some(Water),
+                    Some(Water | Air),
                     Some(Water),
                     Some(Water | Air),
                     Some(Air),
                     Some(Air),
                     Some(Air),
-                    Some(Water),
+                    Some(Water | Air),
                     Some(Water),
                     Some(Water | Air),
                 )
                 | (
                     Some(Water | Air),
-                    Some(Water),
-                    Some(Water),
-                    Some(Air),
-                    Some(Air),
                     Some(Air),
                     Some(Water | Air),
                     Some(Water),
                     Some(Water),
-                ) => 0.0,
-                _ => 1.0,
+                    Some(Water),
+                    Some(Water | Air),
+                    Some(Air),
+                    Some(Water | Air),
+                )
+                | (
+                    Some(Water | Soil),
+                    Some(Water),
+                    Some(Water | Soil),
+                    Some(Soil),
+                    Some(Soil),
+                    Some(Soil),
+                    Some(Water | Soil),
+                    Some(Water),
+                    Some(Water | Soil),
+                )
+                | (
+                    Some(Water | Soil),
+                    Some(Soil),
+                    Some(Water | Soil),
+                    Some(Water),
+                    Some(Water),
+                    Some(Water),
+                    Some(Water | Soil),
+                    Some(Soil),
+                    Some(Water | Soil),
+                )
+                | (
+                    Some(Air | Soil),
+                    Some(Air),
+                    Some(Air | Soil),
+                    Some(Soil),
+                    Some(Soil),
+                    Some(Soil),
+                    Some(Air | Soil),
+                    Some(Air),
+                    Some(Air | Soil),
+                )
+                | (
+                    Some(Air | Soil),
+                    Some(Soil),
+                    Some(Air | Soil),
+                    Some(Air),
+                    Some(Air),
+                    Some(Air),
+                    Some(Air | Soil),
+                    Some(Soil),
+                    Some(Air | Soil),
+                )
+                | (
+                    Some(Water | Soil),
+                    Some(Water),
+                    Some(Water | Soil),
+                    Some(Soil),
+                    Some(Water),
+                    Some(Soil),
+                    Some(Water | Soil),
+                    Some(Water),
+                    Some(Water | Soil),
+                )
+                | (
+                    Some(Water | Soil),
+                    Some(Soil),
+                    Some(Water | Soil),
+                    Some(Water),
+                    Some(Soil),
+                    Some(Water),
+                    Some(Water | Soil),
+                    Some(Soil),
+                    Some(Water | Soil),
+                )
+                | (
+                    Some(Water | Air),
+                    Some(Water),
+                    Some(Water | Air),
+                    Some(Air),
+                    Some(Water),
+                    Some(Air),
+                    Some(Water | Air),
+                    Some(Water),
+                    Some(Water | Air),
+                )
+                | (
+                    Some(Water | Air),
+                    Some(Air),
+                    Some(Water | Air),
+                    Some(Water),
+                    Some(Air),
+                    Some(Water),
+                    Some(Water | Air),
+                    Some(Air),
+                    Some(Water | Air),
+                )
+                | (
+                    Some(Soil | Air),
+                    Some(Soil),
+                    Some(Soil | Air),
+                    Some(Air),
+                    Some(Soil),
+                    Some(Air),
+                    Some(Soil | Air),
+                    Some(Soil),
+                    Some(Soil | Air),
+                )
+                | (
+                    Some(Soil | Air),
+                    Some(Air),
+                    Some(Soil | Air),
+                    Some(Soil),
+                    Some(Air),
+                    Some(Soil),
+                    Some(Soil | Air),
+                    Some(Air),
+                    Some(Soil | Air),
+                ) => -1.0,
+                (
+                    Some(Air),
+                    Some(Air),
+                    Some(Air),
+                    Some(Water),
+                    Some(Water),
+                    Some(Water),
+                    Some(Water),
+                    Some(Water),
+                    Some(Water),
+                )
+                | (
+                    Some(Water),
+                    Some(Water),
+                    Some(Water),
+                    Some(Soil),
+                    Some(Soil),
+                    Some(Soil),
+                    Some(Soil),
+                    Some(Soil),
+                    Some(Soil),
+                ) => 1.0,
+                _ => 0.0,
             }
         })
         .sum::<f32>()
         / element_count as f32;
 
-    saturation_score + position_score + distributsion_score + pattern_score
+    let orphan_score = 1.0 / state.n_orphans.max(1) as f32;
+    let conflict_score = 1.0 / state.conflict_iters.max(1) as f32;
+
+    let change_score = GridEnumerator::new(&state.elements)
+        .map(|(x, y)| {
+            let old = old_state.elements.get(x as isize, y as isize).unwrap();
+            let new = state.elements.get(x as isize, y as isize).unwrap();
+
+            let es = if old == new { 0.0 } else { 1.0 };
+            let ss = (old.saturation() - new.saturation()).abs()
+                / (old.saturation() + new.saturation()).0;
+
+            0.5 * es + 0.5 * ss
+        })
+        .sum::<f32>()
+        / element_count as f32;
+
+    let change_score = (change_score - 0.1).abs();
+
+    3.0 * saturation_score
+        + 2.0 * position_score
+        + distributsion_score
+        + pattern_score
+        + orphan_score
+        + conflict_score
+        + change_score
 }

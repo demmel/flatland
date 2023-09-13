@@ -10,7 +10,7 @@ pub fn reduce_potential_moves(
     scorer: &mut PairwiseTileScorer,
     config: &Config,
     potential_moves: &mut Grid<PotentialMoves>,
-) -> Grid<(isize, isize)> {
+) -> (Grid<(isize, isize)>, usize, usize) {
     let mut iters = 0;
     let mut max_in_conflict = 0;
     let mut conflicts = Grid::new(
@@ -39,30 +39,34 @@ pub fn reduce_potential_moves(
     // println!("Conflict resolution iterations: {iters}");
     // println!("Max in conflict: {max_in_conflict}");
 
-    resolve_orphans(&mut resolutions, potential_moves);
+    let n_orphans = resolve_orphans(&mut resolutions, potential_moves);
 
-    Grid::new(potential_moves.width(), potential_moves.height(), |x, y| {
-        let r = resolutions.get(x as isize, y as isize).unwrap();
-        if r.is_resolved() {
-            let (ox, oy) = r.resolved_move();
-            (ox, oy)
-        } else {
-            panic!("Unresolved conflict");
-        }
-    })
+    (
+        Grid::new(potential_moves.width(), potential_moves.height(), |x, y| {
+            let r = resolutions.get(x as isize, y as isize).unwrap();
+            if r.is_resolved() {
+                let (ox, oy) = r.resolved_move();
+                (ox, oy)
+            } else {
+                panic!("Unresolved conflict");
+            }
+        }),
+        n_orphans,
+        iters,
+    )
 }
 
 fn resolve_orphans(
     resolutions: &mut Grid<MoveConflict>,
     potential_moves: &mut Grid<PotentialMoves>,
-) {
+) -> usize {
     let orphans: Vec<_> = potential_moves
         .enumerate()
         .filter(|(_x, _y, p)| p.current().is_none())
         .map(|(x, y, _p)| (x as isize, y as isize))
         .collect();
 
-    // println!("Orphans: {}", orphans.len());
+    let orphans_len = orphans.len();
 
     let slots: Vec<_> = resolutions
         .enumerate()
@@ -96,6 +100,8 @@ fn resolve_orphans(
         resolutions.get_mut(sx, sy).unwrap().resolve((ox, oy));
         slots_spatial.remove(&[ssx, ssy], slot_idx);
     }
+
+    orphans_len
 }
 
 pub fn resolve_conflicts(
@@ -186,7 +192,7 @@ impl MoveConflict {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PotentialMoves {
     preferences: Vec<(isize, isize)>,
     current: usize,

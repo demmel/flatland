@@ -1,54 +1,72 @@
+use ordered_float::OrderedFloat;
 use rand::{seq::IteratorRandom, thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Config {
     pub air_adhesion: Polynomial,
     pub air_cohesion: Polynomial,
     pub air_density: Polynomial,
-    pub air_to_water_saturation_threshold: f32,
-    pub saturation_diffusion_rate: f32,
+    pub air_to_water_saturation_threshold: OrderedFloat<f32>,
+    pub saturation_diffusion_rate: OrderedFloat<f32>,
     pub soil_adhesion: Polynomial,
     pub soil_cohesion: Polynomial,
     pub soil_density: Polynomial,
     pub water_adhesion: Polynomial,
     pub water_cohesion: Polynomial,
     pub water_density: Polynomial,
-    pub water_to_air_saturation_threshold: f32,
-    pub neighbor_attraction_weights: [f32; 8],
-    pub neighbor_density_weights: [f32; 8],
-    pub attraction_score_weight: f32,
-    pub density_score_weight: f32,
+    pub water_to_air_saturation_threshold: OrderedFloat<f32>,
+    pub neighbor_attraction_weights: [OrderedFloat<f32>; 8],
+    pub neighbor_density_weights: [OrderedFloat<f32>; 8],
+    pub attraction_score_weight: OrderedFloat<f32>,
+    pub density_score_weight: OrderedFloat<f32>,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            air_to_water_saturation_threshold: 0.9,
-            air_density: Polynomial::new(vec![0.1, -0.1]),
-            saturation_diffusion_rate: 0.01,
-            soil_density: Polynomial::new(vec![1.0, -0.1]),
-            water_to_air_saturation_threshold: 0.5,
-            water_density: Polynomial::new(vec![0.5, 0.1]),
-            air_adhesion: Polynomial::new(vec![0.1, 0.05]),
-            air_cohesion: Polynomial::new(vec![0.1, 0.4]),
-            soil_adhesion: Polynomial::new(vec![0.0, 3.25, -2.5]),
-            soil_cohesion: Polynomial::new(vec![0.0, 3.25, -2.5]),
-            water_adhesion: Polynomial::new(vec![0.75]),
-            water_cohesion: Polynomial::new(vec![0.5]),
+            air_to_water_saturation_threshold: 0.9.into(),
+            air_density: Polynomial::new(vec![OrderedFloat(0.1), OrderedFloat(-0.1)]),
+            saturation_diffusion_rate: 0.01.into(),
+            soil_density: Polynomial::new(vec![OrderedFloat(1.0), OrderedFloat(-0.1)]),
+            water_to_air_saturation_threshold: 0.5.into(),
+            water_density: Polynomial::new(vec![OrderedFloat(0.5), OrderedFloat(0.1)]),
+            air_adhesion: Polynomial::new(vec![OrderedFloat(0.1), OrderedFloat(0.05)]),
+            air_cohesion: Polynomial::new(vec![OrderedFloat(0.1), OrderedFloat(0.4)]),
+            soil_adhesion: Polynomial::new(vec![
+                OrderedFloat(0.0),
+                OrderedFloat(3.25),
+                OrderedFloat(-2.5),
+            ]),
+            soil_cohesion: Polynomial::new(vec![
+                OrderedFloat(0.0),
+                OrderedFloat(3.25),
+                OrderedFloat(-2.5),
+            ]),
+            water_adhesion: Polynomial::new(vec![OrderedFloat(0.75)]),
+            water_cohesion: Polynomial::new(vec![OrderedFloat(0.5)]),
             neighbor_attraction_weights: [
-                1.0 / 16.0,
-                3.0 / 16.0,
-                1.0 / 16.0,
-                3.0 / 16.0,
-                3.0 / 16.0,
-                1.0 / 16.0,
-                3.0 / 16.0,
-                1.0 / 16.0,
+                (1.0 / 16.0).into(),
+                (3.0 / 16.0).into(),
+                (1.0 / 16.0).into(),
+                (3.0 / 16.0).into(),
+                (3.0 / 16.0).into(),
+                (1.0 / 16.0).into(),
+                (3.0 / 16.0).into(),
+                (1.0 / 16.0).into(),
             ],
-            neighbor_density_weights: [0.0, -0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0],
-            attraction_score_weight: 1.0,
-            density_score_weight: 1.0,
+            neighbor_density_weights: [
+                OrderedFloat(0.0),
+                OrderedFloat(-0.5),
+                OrderedFloat(0.0),
+                OrderedFloat(0.0),
+                OrderedFloat(0.0),
+                OrderedFloat(0.0),
+                OrderedFloat(0.5),
+                OrderedFloat(0.0),
+            ],
+            attraction_score_weight: 1.0.into(),
+            density_score_weight: 1.0.into(),
         }
     }
 }
@@ -56,40 +74,76 @@ impl Default for Config {
 impl Config {
     pub fn gen<R: Rng>(rng: &mut R) -> Self {
         Self {
-            air_to_water_saturation_threshold: rng.gen(),
-            air_density: Polynomial::new((0..rng.gen_range(1..3)).map(|_| rng.gen()).collect()),
-            saturation_diffusion_rate: rng.gen(),
-            soil_density: Polynomial::new((0..rng.gen_range(1..3)).map(|_| rng.gen()).collect()),
-            water_to_air_saturation_threshold: rng.gen(),
-            water_density: Polynomial::new((0..rng.gen_range(1..3)).map(|_| rng.gen()).collect()),
-            air_adhesion: Polynomial::new((0..rng.gen_range(1..3)).map(|_| rng.gen()).collect()),
-            air_cohesion: Polynomial::new((0..rng.gen_range(1..3)).map(|_| rng.gen()).collect()),
-            soil_adhesion: Polynomial::new((0..rng.gen_range(1..3)).map(|_| rng.gen()).collect()),
-            soil_cohesion: Polynomial::new((0..rng.gen_range(1..3)).map(|_| rng.gen()).collect()),
-            water_adhesion: Polynomial::new((0..rng.gen_range(1..3)).map(|_| rng.gen()).collect()),
-            water_cohesion: Polynomial::new((0..rng.gen_range(1..3)).map(|_| rng.gen()).collect()),
+            air_to_water_saturation_threshold: rng.gen::<f32>().into(),
+            air_density: Polynomial::new(
+                (0..rng.gen_range(1..3))
+                    .map(|_| rng.gen::<f32>().into())
+                    .collect(),
+            ),
+            saturation_diffusion_rate: rng.gen::<f32>().into(),
+            soil_density: Polynomial::new(
+                (0..rng.gen_range(1..3))
+                    .map(|_| rng.gen::<f32>().into())
+                    .collect(),
+            ),
+            water_to_air_saturation_threshold: rng.gen::<f32>().into(),
+            water_density: Polynomial::new(
+                (0..rng.gen_range(1..3))
+                    .map(|_| rng.gen::<f32>().into())
+                    .collect(),
+            ),
+            air_adhesion: Polynomial::new(
+                (0..rng.gen_range(1..3))
+                    .map(|_| rng.gen::<f32>().into())
+                    .collect(),
+            ),
+            air_cohesion: Polynomial::new(
+                (0..rng.gen_range(1..3))
+                    .map(|_| rng.gen::<f32>().into())
+                    .collect(),
+            ),
+            soil_adhesion: Polynomial::new(
+                (0..rng.gen_range(1..3))
+                    .map(|_| rng.gen::<f32>().into())
+                    .collect(),
+            ),
+            soil_cohesion: Polynomial::new(
+                (0..rng.gen_range(1..3))
+                    .map(|_| rng.gen::<f32>().into())
+                    .collect(),
+            ),
+            water_adhesion: Polynomial::new(
+                (0..rng.gen_range(1..3))
+                    .map(|_| rng.gen::<f32>().into())
+                    .collect(),
+            ),
+            water_cohesion: Polynomial::new(
+                (0..rng.gen_range(1..3))
+                    .map(|_| rng.gen::<f32>().into())
+                    .collect(),
+            ),
             neighbor_attraction_weights: [
-                rng.gen_range(-1.0..=1.0),
-                rng.gen_range(-1.0..=1.0),
-                rng.gen_range(-1.0..=1.0),
-                rng.gen_range(-1.0..=1.0),
-                rng.gen_range(-1.0..=1.0),
-                rng.gen_range(-1.0..=1.0),
-                rng.gen_range(-1.0..=1.0),
-                rng.gen_range(-1.0..=1.0),
+                rng.gen_range(-1.0..=1.0).into(),
+                rng.gen_range(-1.0..=1.0).into(),
+                rng.gen_range(-1.0..=1.0).into(),
+                rng.gen_range(-1.0..=1.0).into(),
+                rng.gen_range(-1.0..=1.0).into(),
+                rng.gen_range(-1.0..=1.0).into(),
+                rng.gen_range(-1.0..=1.0).into(),
+                rng.gen_range(-1.0..=1.0).into(),
             ],
             neighbor_density_weights: [
-                rng.gen_range(-1.0..=1.0),
-                rng.gen_range(-1.0..=1.0),
-                rng.gen_range(-1.0..=1.0),
-                rng.gen_range(-1.0..=1.0),
-                rng.gen_range(-1.0..=1.0),
-                rng.gen_range(-1.0..=1.0),
-                rng.gen_range(-1.0..=1.0),
-                rng.gen_range(-1.0..=1.0),
+                rng.gen_range(-1.0..=1.0).into(),
+                rng.gen_range(-1.0..=1.0).into(),
+                rng.gen_range(-1.0..=1.0).into(),
+                rng.gen_range(-1.0..=1.0).into(),
+                rng.gen_range(-1.0..=1.0).into(),
+                rng.gen_range(-1.0..=1.0).into(),
+                rng.gen_range(-1.0..=1.0).into(),
+                rng.gen_range(-1.0..=1.0).into(),
             ],
-            attraction_score_weight: rng.gen(),
-            density_score_weight: rng.gen(),
+            attraction_score_weight: rng.gen::<f32>().into(),
+            density_score_weight: rng.gen::<f32>().into(),
         }
     }
 
@@ -122,13 +176,15 @@ impl Config {
                 other.water_to_air_saturation_threshold
             },
             neighbor_attraction_weights: crossover_f32_arrays(
-                &self.neighbor_attraction_weights,
-                &other.neighbor_attraction_weights,
-            ),
+                &self.neighbor_attraction_weights.map(|x| x.0),
+                &other.neighbor_attraction_weights.map(|x| x.0),
+            )
+            .map(|x| x.into()),
             neighbor_density_weights: crossover_f32_arrays(
-                &self.neighbor_density_weights,
-                &other.neighbor_density_weights,
-            ),
+                &self.neighbor_density_weights.map(|x| x.0),
+                &other.neighbor_density_weights.map(|x| x.0),
+            )
+            .map(|x| x.into()),
             attraction_score_weight: if rng.gen() {
                 self.attraction_score_weight
             } else {
@@ -142,42 +198,55 @@ impl Config {
         }
     }
 
-    pub fn mutate(self) -> Self {
+    pub fn mutate(self, r: f32) -> Self {
         Self {
-            air_adhesion: self.air_adhesion.mutate(),
-            air_cohesion: self.air_cohesion.mutate(),
-            air_density: self.air_density.mutate(),
+            air_adhesion: self.air_adhesion.mutate(r),
+            air_cohesion: self.air_cohesion.mutate(r),
+            air_density: self.air_density.mutate(r),
             air_to_water_saturation_threshold: mutate_f32(
-                self.air_to_water_saturation_threshold,
+                self.air_to_water_saturation_threshold.0,
+                r,
                 0.0,
                 1.0,
-            ),
-            saturation_diffusion_rate: mutate_f32(self.saturation_diffusion_rate, 0.0, 1.0),
-            soil_adhesion: self.soil_adhesion.mutate(),
-            soil_cohesion: self.soil_cohesion.mutate(),
-            soil_density: self.soil_density.mutate(),
-            water_adhesion: self.water_adhesion.mutate(),
-            water_cohesion: self.water_cohesion.mutate(),
-            water_density: self.water_density.mutate(),
+            )
+            .into(),
+            saturation_diffusion_rate: mutate_f32(self.saturation_diffusion_rate.0, r, 0.0, 1.0)
+                .into(),
+            soil_adhesion: self.soil_adhesion.mutate(r),
+            soil_cohesion: self.soil_cohesion.mutate(r),
+            soil_density: self.soil_density.mutate(r),
+            water_adhesion: self.water_adhesion.mutate(r),
+            water_cohesion: self.water_cohesion.mutate(r),
+            water_density: self.water_density.mutate(r),
             water_to_air_saturation_threshold: mutate_f32(
-                self.water_to_air_saturation_threshold,
+                self.water_to_air_saturation_threshold.0,
+                r,
                 0.0,
                 1.0,
-            ),
+            )
+            .into(),
             neighbor_attraction_weights: mutate_f32_array(
-                self.neighbor_attraction_weights,
+                self.neighbor_attraction_weights.map(|x| x.0),
+                r,
                 -1.0,
                 1.0,
-            ),
-            neighbor_density_weights: mutate_f32_array(self.neighbor_density_weights, -1.0, 1.0),
-            attraction_score_weight: mutate_f32(self.attraction_score_weight, 0.0, 1.0),
-            density_score_weight: mutate_f32(self.density_score_weight, 0.0, 1.0),
+            )
+            .map(|x| x.into()),
+            neighbor_density_weights: mutate_f32_array(
+                self.neighbor_density_weights.map(|x| x.0),
+                r,
+                -1.0,
+                1.0,
+            )
+            .map(|x| x.into()),
+            attraction_score_weight: mutate_f32(self.attraction_score_weight.0, r, 0.0, 1.0).into(),
+            density_score_weight: mutate_f32(self.density_score_weight.0, r, 0.0, 1.0).into(),
         }
     }
 }
 
-fn mutate_f32(f: f32, min: f32, max: f32) -> f32 {
-    let delta = (f * 0.05).max(f32::EPSILON);
+fn mutate_f32(f: f32, r: f32, min: f32, max: f32) -> f32 {
+    let delta = (f * r).max(f32::EPSILON);
     (f + thread_rng().gen_range(-delta..=delta)).clamp(min, max)
 }
 
@@ -192,20 +261,20 @@ fn crossover_f32_arrays(a: &[f32; 8], b: &[f32; 8]) -> [f32; 8] {
     res
 }
 
-fn mutate_f32_array(mut f: [f32; 8], min: f32, max: f32) -> [f32; 8] {
+fn mutate_f32_array(mut f: [f32; 8], r: f32, min: f32, max: f32) -> [f32; 8] {
     for i in 0..f.len() {
-        f[i] = mutate_f32(f[i], min, max);
+        f[i] = mutate_f32(f[i], r, min, max);
     }
     f
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Polynomial {
-    coeffs: Vec<f32>,
+    coeffs: Vec<OrderedFloat<f32>>,
 }
 
 impl Polynomial {
-    fn new(coeffs: Vec<f32>) -> Self {
+    fn new(coeffs: Vec<OrderedFloat<f32>>) -> Self {
         Self { coeffs }
     }
 
@@ -213,7 +282,7 @@ impl Polynomial {
         self.coeffs
             .iter()
             .enumerate()
-            .map(|(d, coeff)| coeff * x.powi(d as i32))
+            .map(|(d, coeff)| coeff.0 * x.powi(d as i32))
             .sum()
     }
 
@@ -240,9 +309,17 @@ impl Polynomial {
         )
     }
 
-    fn mutate(mut self) -> Polynomial {
+    fn mutate(mut self, r: f32) -> Polynomial {
+        let mut rng = thread_rng();
+        let rp = 1.0 - (1.0 - r).powf(0.5);
+        if rng.gen::<f32>() < rp {
+            self.coeffs.push(rng.gen_range(-5.0..=5.0).into());
+        } else if rng.gen::<f32>() < rp {
+            self.coeffs.pop();
+        }
+
         for f in self.coeffs.iter_mut() {
-            *f = mutate_f32(*f, -5.0, 5.0);
+            *f = mutate_f32(f.0, r, -5.0, 5.0).into();
         }
         self
     }

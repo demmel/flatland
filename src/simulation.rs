@@ -18,10 +18,13 @@ use self::{
     score::{PairwiseTileScorer, WINDOW_SIZE_OV_2},
 };
 
+#[derive(Debug, Clone)]
 pub struct State {
     pub elements: Grid<Tile>,
     pub config: Config,
     potential_moves: Grid<PotentialMoves>,
+    pub n_orphans: usize,
+    pub conflict_iters: usize,
 }
 
 impl State {
@@ -44,6 +47,8 @@ impl State {
             }),
             config,
             potential_moves: Grid::new(width, height, |_, _| PotentialMoves::new(vec![])),
+            n_orphans: 0,
+            conflict_iters: 0,
         }
     }
 
@@ -77,7 +82,10 @@ impl State {
             self.update_potential_moves(x, y, &scorer);
         }
 
-        let moves = reduce_potential_moves(&mut scorer, &self.config, &mut self.potential_moves);
+        let (moves, n_orphans, conflict_iters) =
+            reduce_potential_moves(&mut scorer, &self.config, &mut self.potential_moves);
+        self.n_orphans = n_orphans;
+        self.conflict_iters = conflict_iters;
         self.elements = Grid::new(self.elements.width(), self.elements.height(), |x, y| {
             let (old_x, old_y) = moves.get(x as isize, y as isize).unwrap();
             self.elements.get(*old_x, *old_y).unwrap().clone()
@@ -124,7 +132,7 @@ impl State {
                 let avg = total / count as f32;
                 let target = avg;
                 let diff = target - w.get(0, 0).unwrap().saturation.0;
-                self.config.saturation_diffusion_rate * diff
+                self.config.saturation_diffusion_rate.0 * diff
             })
             .collect();
         let saturations =
@@ -135,10 +143,10 @@ impl State {
             let s = &mut t.saturation;
             s.0 = (s.0 + saturations.get(x as isize, y as isize).unwrap()).clamp(0.0, 1.0);
             match t.element {
-                Element::Air if s.0 >= self.config.air_to_water_saturation_threshold => {
+                Element::Air if s.0 >= self.config.air_to_water_saturation_threshold.0 => {
                     t.element = Element::Water
                 }
-                Element::Water if s.0 < self.config.water_to_air_saturation_threshold => {
+                Element::Water if s.0 < self.config.water_to_air_saturation_threshold.0 => {
                     t.element = Element::Air
                 }
                 _ => {}
