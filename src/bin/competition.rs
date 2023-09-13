@@ -7,9 +7,10 @@ use show_image::{
     event::{VirtualKeyCode, WindowEvent},
     WindowOptions,
 };
+use step_ranker::Ranker;
 
 use roots::{
-    ranker::Ranker,
+    
     simulation::{config::Config, State},
 };
 
