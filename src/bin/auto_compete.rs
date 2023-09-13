@@ -4,7 +4,7 @@ use ordered_float::OrderedFloat;
 use rand::prelude::*;
 use rayon::prelude::*;
 
-use roots::{
+use flatland::{
     grid::{GridEnumerator, GridLike},
     simulation::{config::Config, Element, State},
 };

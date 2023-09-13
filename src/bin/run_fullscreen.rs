@@ -6,7 +6,7 @@ use show_image::{
     WindowOptions,
 };
 
-use roots::simulation::{config::Config, State};
+use flatland::simulation::{config::Config, State};
 
 #[show_image::main]
 fn main() -> Result<(), Box<dyn Error>> {

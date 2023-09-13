@@ -9,10 +9,7 @@ use show_image::{
 };
 use step_ranker::Ranker;
 
-use roots::{
-    
-    simulation::{config::Config, State},
-};
+use flatland::simulation::{config::Config, State};
 
 #[show_image::main]
 fn main() -> Result<(), Box<dyn Error>> {
