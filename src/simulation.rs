@@ -69,6 +69,7 @@ impl State {
         let start = std::time::Instant::now();
         self.update_positions();
         self.update_saturations();
+        self.update_elements();
         let elapsed = std::time::Instant::now() - start;
         // println!("Update: {}s", elapsed.as_secs_f32());
     }
@@ -139,11 +140,21 @@ impl State {
             let t = self.elements.get_mut(x as isize, y as isize).unwrap();
             let s = &mut t.saturation;
             s.0 = (s.0 + saturations.get(x as isize, y as isize).unwrap()).clamp(0.0, 1.0);
+        }
+    }
+
+    fn update_elements(&mut self) {
+        for (x, y) in GridEnumerator::new(&self.elements) {
+            let t = self.elements.get_mut(x as isize, y as isize).unwrap();
             match t.element {
-                Element::Air if s.0 >= self.config.air_to_water_saturation_threshold.0 => {
+                Element::Air
+                    if t.saturation().0 >= self.config.air_to_water_saturation_threshold.0 =>
+                {
                     t.element = Element::Water
                 }
-                Element::Water if s.0 < self.config.water_to_air_saturation_threshold.0 => {
+                Element::Water
+                    if t.saturation().0 < self.config.water_to_air_saturation_threshold.0 =>
+                {
                     t.element = Element::Air
                 }
                 _ => {}
