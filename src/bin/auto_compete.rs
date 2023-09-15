@@ -5,7 +5,7 @@ use rand::prelude::*;
 use rayon::prelude::*;
 
 use flatland::{
-    grid::{GridEnumerator, GridLike},
+    grid::GridLike,
     simulation::{config::Config, Element, State},
 };
 use serde::{Deserialize, Serialize};
@@ -150,7 +150,7 @@ fn score_configs(configs: &[Config]) -> Vec<ConfigScore> {
             let mut state = State::gen(c.clone(), 64, 64);
             ConfigScore(
                 c.clone(),
-                (0..1000)
+                (0..100)
                     .map(|_| {
                         let old_state = state.clone();
                         state.update();
@@ -391,30 +391,11 @@ fn score_state(old_state: &State, state: &State) -> f32 {
         .sum::<f32>()
         / element_count as f32;
 
-    let orphan_score = 1.0 / state.n_orphans.max(1) as f32;
     let conflict_score = 1.0 / state.conflict_iters.max(1) as f32;
-
-    let change_score = GridEnumerator::new(&state.elements)
-        .map(|(x, y)| {
-            let old = old_state.elements.get(x as isize, y as isize).unwrap();
-            let new = state.elements.get(x as isize, y as isize).unwrap();
-
-            let es = if old == new { 0.0 } else { 1.0 };
-            let ss = (old.saturation() - new.saturation()).abs()
-                / (old.saturation() + new.saturation()).0;
-
-            0.5 * es + 0.5 * ss
-        })
-        .sum::<f32>()
-        / element_count as f32;
-
-    let change_score = (change_score - 0.1).abs();
 
     3.0 * saturation_score
         + 2.0 * position_score
         + distributsion_score
         + pattern_score
-        + orphan_score
         + conflict_score
-        + change_score
 }

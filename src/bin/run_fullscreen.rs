@@ -10,7 +10,10 @@ use flatland::simulation::{config::Config, State};
 
 #[show_image::main]
 fn main() -> Result<(), Box<dyn Error>> {
-    let config = serde_json::from_reader(File::open("config.json")?).unwrap_or(Config::default());
+    let config = File::open("config.json")
+        .map_err(|_| "Couldn't fine config file")
+        .and_then(|f| serde_json::from_reader(f).map_err(|_| "Malformed config"))
+        .unwrap_or(Config::default());
     let mut state: State = State::gen(config, 320, 180);
     let mut running: bool = false;
 

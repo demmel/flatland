@@ -23,7 +23,6 @@ pub struct State {
     pub elements: Grid<Tile>,
     pub config: Config,
     potential_moves: Grid<PotentialMoves>,
-    pub n_orphans: usize,
     pub conflict_iters: usize,
 }
 
@@ -47,7 +46,6 @@ impl State {
             }),
             config,
             potential_moves: Grid::new(width, height, |_, _| PotentialMoves::new(vec![])),
-            n_orphans: 0,
             conflict_iters: 0,
         }
     }
@@ -82,9 +80,8 @@ impl State {
             self.update_potential_moves(x, y, &scorer);
         }
 
-        let (moves, n_orphans, conflict_iters) =
+        let (moves, conflict_iters) =
             reduce_potential_moves(&mut scorer, &self.config, &mut self.potential_moves);
-        self.n_orphans = n_orphans;
         self.conflict_iters = conflict_iters;
         self.elements = Grid::new(self.elements.width(), self.elements.height(), |x, y| {
             let (old_x, old_y) = moves.get(x as isize, y as isize).unwrap();
