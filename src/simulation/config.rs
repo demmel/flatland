@@ -1,7 +1,8 @@
 use genetic::{Crossover, Gen, Mutate};
-use ordered_float::{Float, OrderedFloat};
-use rand::{seq::IteratorRandom, Rng};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
+
+use crate::{clamped_f32::ClampedF32, polynomail::Polynomial};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Crossover, Mutate, Gen)]
 pub struct Config {
@@ -77,119 +78,4 @@ pub struct ElementConfig {
     pub adhesion: Polynomial,
     pub cohesion: Polynomial,
     pub density: Polynomial,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-pub struct ClampedF32<const MIN: i32, const MAX: i32, const DENOM: u32>(OrderedFloat<f32>);
-
-impl<const MIN: i32, const MAX: i32, const DENOM: u32> ClampedF32<MIN, MAX, DENOM> {
-    pub fn new(f: f32) -> Self {
-        Self(OrderedFloat(f.clamp(Self::min(), Self::max())))
-    }
-
-    pub fn as_f32(&self) -> f32 {
-        self.0 .0
-    }
-
-    pub fn min() -> f32 {
-        MIN as f32 / DENOM as f32
-    }
-
-    pub fn max() -> f32 {
-        MAX as f32 / DENOM as f32
-    }
-}
-
-impl<const MIN: i32, const MAX: i32, const DENOM: u32> Gen for ClampedF32<MIN, MAX, DENOM> {
-    fn gen<R: Rng>(rng: &mut R) -> Self {
-        Self::new(rng.gen_range(Self::min()..=Self::max()))
-    }
-}
-
-impl<const MIN: i32, const MAX: i32, const DENOM: u32> Crossover for ClampedF32<MIN, MAX, DENOM> {
-    fn crossover<R: Rng>(&self, other: &Self, rng: &mut R) -> Self {
-        match rng.gen_range(0..3) {
-            0 => *self,
-            1 => *other,
-            2 => Self((self.0 + other.0) / 2.0),
-            _ => unreachable!(),
-        }
-    }
-}
-
-impl<const MIN: i32, const MAX: i32, const DENOM: u32> Mutate for ClampedF32<MIN, MAX, DENOM> {
-    fn mutate<R: Rng>(&mut self, rate: f32, rng: &mut R) {
-        let delta = Ord::max(self.0 * rate, OrderedFloat::epsilon());
-        self.0 += OrderedFloat(
-            rng.gen_range(-delta.0..=delta.0)
-                .clamp(Self::min(), Self::max()),
-        );
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Polynomial {
-    coeffs: Vec<ClampedF32<-5, 5, 1>>,
-}
-
-impl Polynomial {
-    fn new(coeffs: Vec<ClampedF32<-5, 5, 1>>) -> Self {
-        Self { coeffs }
-    }
-
-    pub fn eval(&self, x: f32) -> f32 {
-        self.coeffs
-            .iter()
-            .enumerate()
-            .map(|(d, coeff)| coeff.0 .0 * x.powi(d as i32))
-            .sum()
-    }
-}
-
-impl Gen for Polynomial {
-    fn gen<R: Rng>(rng: &mut R) -> Self {
-        Self::new(
-            (0..=3)
-                .map(|_| ClampedF32::new(rng.gen_range(-5.0..=5.0)))
-                .collect(),
-        )
-    }
-}
-
-impl Crossover for Polynomial {
-    fn crossover<R: Rng>(&self, other: &Self, rng: &mut R) -> Self {
-        let min = self.coeffs.len().min(other.coeffs.len());
-        let max = self.coeffs.len().max(other.coeffs.len());
-        let len = (min..=max).choose(rng).unwrap();
-
-        Self::new(
-            (0..len)
-                .map(|i| match (self.coeffs.get(i), other.coeffs.get(i)) {
-                    (None, None) => unreachable!(),
-                    (None, Some(only)) | (Some(only), None) => *only,
-                    (Some(a), Some(b)) => match rng.gen_range(0..3) {
-                        0 => *a,
-                        1 => *b,
-                        2 => ClampedF32::new((*a.0 + *b.0) / 2.0),
-                        _ => unreachable!(),
-                    },
-                })
-                .collect(),
-        )
-    }
-}
-
-impl Mutate for Polynomial {
-    fn mutate<R: Rng>(&mut self, rate: f32, rng: &mut R) {
-        let rp = 1.0 - (1.0 - rate).powf(0.5);
-        if rng.gen::<f32>() < rp {
-            self.coeffs.push(ClampedF32::new(rng.gen_range(-5.0..=5.0)));
-        } else if rng.gen::<f32>() < rp {
-            self.coeffs.pop();
-        }
-
-        for f in self.coeffs.iter_mut() {
-            f.mutate(rate, rng);
-        }
-    }
 }
