@@ -19,6 +19,7 @@ serde_json = "1.0.105"
 show-image = { version = "0.13.1", features = ["image"] }
 statistical = "1.0.0"
 step_ranker = { path = "../step_ranker" }
+genetic = { path = "../genetic", features = ["derive"] }
 
 [profile.release]
 debug = true

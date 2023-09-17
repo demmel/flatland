@@ -607,6 +607,7 @@ version = "0.1.0"
 dependencies = [
  "enum-ordinalize",
  "fixed",
+ "genetic",
  "image",
  "kiddo",
  "ordered-float",
@@ -803,6 +804,14 @@ checksum = "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a"
 dependencies = [
  "typenum",
  "version_check",
+]
+
+[[package]]
+name = "genetic"
+version = "0.1.0"
+dependencies = [
+ "proc_macros",
+ "rand 0.8.5",
 ]
 
 [[package]]
@@ -1656,6 +1665,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "18fb31db3f9bddb2ea821cde30a9f70117e3f119938b5ee630b7403aa6e2ead9"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "proc_macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]

@@ -98,8 +98,8 @@ impl PairwiseTileScorer {
         let mut attraction_score = 0.0;
         let mut density_score = 0.0;
         for (i, o) in neighbors.into_iter().enumerate() {
-            let aw = config.neighbor_attraction_weights[i].0;
-            let dw = config.neighbor_density_weights[i].0;
+            let aw = config.neighbor_attraction_weights[i].as_f32();
+            let dw = config.neighbor_density_weights[i].as_f32();
 
             let (a, d) = self.get((tx, ty), o);
 
@@ -111,8 +111,8 @@ impl PairwiseTileScorer {
         let dy = y - ty;
         let dist = dx.abs().max(dy.abs());
 
-        config.attraction_score_weight.0 * attraction_score
-            + config.density_score_weight.0 * density_score
+        config.attraction_score_weight.as_f32() * attraction_score
+            + config.density_score_weight.as_f32() * density_score
             - (0.0001 * dist as f32)
     }
 }

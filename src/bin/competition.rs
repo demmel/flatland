@@ -1,5 +1,6 @@
 use std::{cmp::Ordering, error::Error, fs::File, sync::mpsc::TryRecvError};
 
+use genetic::{Crossover, Mutate};
 use image::{GenericImage, RgbImage};
 use rand::prelude::*;
 use show_image::{
@@ -171,7 +172,9 @@ fn rank_selected(
         let mut new_competitors = Vec::with_capacity(competitors_inner.len());
 
         new_competitors.push(competitors_inner[0].clone());
-        new_competitors.push(competitors_inner[0].clone().mutate(0.1));
+        let mut m = competitors_inner[0].clone();
+        m.mutate(0.1, &mut rng);
+        new_competitors.push(m);
         for _ in 0..((competitors_inner.len() - 2) / 2) {
             new_competitors.push(Config::gen(&mut rng));
         }
@@ -181,7 +184,7 @@ fn rank_selected(
                 competitors_inner[0..(competitors_inner.len() / 2)].choose_multiple(&mut rng, 2);
             let a = competitors.next().unwrap();
             let b = competitors.next().unwrap();
-            let c = a.crossover(b);
+            let c = a.crossover(b, &mut rng);
             new_competitors.push(c);
         }
 

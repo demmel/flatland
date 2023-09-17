@@ -130,7 +130,7 @@ impl State {
                 let avg = total / count as f32;
                 let target = avg;
                 let diff = target - w.get(0, 0).unwrap().saturation.0;
-                self.config.saturation_diffusion_rate.0 * diff
+                self.config.saturation_diffusion_rate.as_f32() * diff
             })
             .collect();
         let saturations =
@@ -148,12 +148,14 @@ impl State {
             let t = self.elements.get_mut(x as isize, y as isize).unwrap();
             match t.element {
                 Element::Air
-                    if t.saturation().0 >= self.config.air_to_water_saturation_threshold.0 =>
+                    if t.saturation().0
+                        >= self.config.air_to_water_saturation_threshold.as_f32() =>
                 {
                     t.element = Element::Water
                 }
                 Element::Water
-                    if t.saturation().0 < self.config.water_to_air_saturation_threshold.0 =>
+                    if t.saturation().0
+                        < self.config.water_to_air_saturation_threshold.as_f32() =>
                 {
                     t.element = Element::Air
                 }
@@ -188,25 +190,25 @@ impl Tile {
 
     fn density(&self, config: &Config) -> f32 {
         match self.element {
-            Element::Air => config.air_density.eval(self.saturation.0),
-            Element::Soil => config.soil_density.eval(self.saturation.0),
-            Element::Water => config.water_density.eval(self.saturation.0),
+            Element::Air => config.air.density.eval(self.saturation.0),
+            Element::Soil => config.soil.density.eval(self.saturation.0),
+            Element::Water => config.water.density.eval(self.saturation.0),
         }
     }
 
     fn cohesion(&self, config: &Config) -> f32 {
         match self.element {
-            Element::Air => config.air_cohesion.eval(self.saturation.0),
-            Element::Soil => config.soil_cohesion.eval(self.saturation.0),
-            Element::Water => config.water_cohesion.eval(self.saturation.0),
+            Element::Air => config.air.cohesion.eval(self.saturation.0),
+            Element::Soil => config.soil.cohesion.eval(self.saturation.0),
+            Element::Water => config.water.cohesion.eval(self.saturation.0),
         }
     }
 
     fn adhesion(&self, config: &Config) -> f32 {
         match self.element {
-            Element::Air => config.air_adhesion.eval(self.saturation.0),
-            Element::Soil => config.soil_adhesion.eval(self.saturation.0),
-            Element::Water => config.water_adhesion.eval(self.saturation.0),
+            Element::Air => config.air.adhesion.eval(self.saturation.0),
+            Element::Soil => config.soil.adhesion.eval(self.saturation.0),
+            Element::Water => config.water.adhesion.eval(self.saturation.0),
         }
     }
 

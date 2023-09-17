@@ -1,5 +1,6 @@
 use std::{collections::BinaryHeap, error::Error, fs::File};
 
+use genetic::{Crossover, Mutate};
 use ordered_float::OrderedFloat;
 use rand::prelude::*;
 use rayon::prelude::*;
@@ -127,7 +128,11 @@ fn next_incremental_generation(configs_scores: &[ConfigScore]) -> Vec<Config> {
                 |ConfigScore(_, s)| s.0,
             )
             .unwrap()
-            .map(|x| x.0.clone().mutate(0.1)),
+            .map(|x| {
+                let mut m = x.0.clone();
+                m.mutate(0.1, &mut rng);
+                m
+            }),
     );
     new_configs.push(Config::gen(&mut rng));
     for _ in 0..((configs_scores.len() - 2) / 2) {
@@ -136,7 +141,7 @@ fn next_incremental_generation(configs_scores: &[ConfigScore]) -> Vec<Config> {
             .unwrap();
         let a = competitors.next().unwrap().0.clone();
         let b = competitors.next().unwrap().0.clone();
-        let c = a.crossover(&b);
+        let c = a.crossover(&b, &mut rng);
         new_configs.push(c);
     }
 
