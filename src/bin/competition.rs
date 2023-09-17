@@ -1,6 +1,6 @@
 use std::{cmp::Ordering, error::Error, fs::File, sync::mpsc::TryRecvError};
 
-use genetic::{Crossover, Mutate};
+use genetic::{Crossover, Gen, Mutate};
 use image::{GenericImage, RgbImage};
 use rand::prelude::*;
 use show_image::{

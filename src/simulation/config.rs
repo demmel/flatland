@@ -1,11 +1,9 @@
-use std::ops::RangeInclusive;
-
-use genetic::{Crossover, Mutate};
+use genetic::{Crossover, Gen, Mutate};
 use ordered_float::{Float, OrderedFloat};
 use rand::{seq::IteratorRandom, Rng};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Crossover, Mutate)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Crossover, Mutate, Gen)]
 pub struct Config {
     pub air: ElementConfig,
     pub soil: ElementConfig,
@@ -74,56 +72,11 @@ impl Default for Config {
     }
 }
 
-impl Config {
-    pub fn gen<R: Rng>(rng: &mut R) -> Self {
-        Self {
-            air: ElementConfig::gen(rng),
-            soil: ElementConfig::gen(rng),
-            water: ElementConfig::gen(rng),
-            air_to_water_saturation_threshold: ClampedF32::gen(rng),
-            saturation_diffusion_rate: ClampedF32::gen(rng),
-            water_to_air_saturation_threshold: ClampedF32::gen(rng),
-            neighbor_attraction_weights: [
-                ClampedF32::gen(rng),
-                ClampedF32::gen(rng),
-                ClampedF32::gen(rng),
-                ClampedF32::gen(rng),
-                ClampedF32::gen(rng),
-                ClampedF32::gen(rng),
-                ClampedF32::gen(rng),
-                ClampedF32::gen(rng),
-            ],
-            neighbor_density_weights: [
-                ClampedF32::gen(rng),
-                ClampedF32::gen(rng),
-                ClampedF32::gen(rng),
-                ClampedF32::gen(rng),
-                ClampedF32::gen(rng),
-                ClampedF32::gen(rng),
-                ClampedF32::gen(rng),
-                ClampedF32::gen(rng),
-            ],
-            attraction_score_weight: ClampedF32::gen(rng),
-            density_score_weight: ClampedF32::gen(rng),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Crossover, Mutate)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Crossover, Mutate, Gen)]
 pub struct ElementConfig {
     pub adhesion: Polynomial,
     pub cohesion: Polynomial,
     pub density: Polynomial,
-}
-
-impl ElementConfig {
-    fn gen<R: Rng>(rng: &mut R) -> Self {
-        Self {
-            adhesion: Polynomial::gen(rng, 0..=3),
-            cohesion: Polynomial::gen(rng, 0..=3),
-            density: Polynomial::gen(rng, 0..=3),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -145,8 +98,10 @@ impl<const MIN: i32, const MAX: i32, const DENOM: u32> ClampedF32<MIN, MAX, DENO
     pub fn max() -> f32 {
         MAX as f32 / DENOM as f32
     }
+}
 
-    pub fn gen<R: Rng>(rng: &mut R) -> Self {
+impl<const MIN: i32, const MAX: i32, const DENOM: u32> Gen for ClampedF32<MIN, MAX, DENOM> {
+    fn gen<R: Rng>(rng: &mut R) -> Self {
         Self::new(rng.gen_range(Self::min()..=Self::max()))
     }
 }
@@ -182,19 +137,22 @@ impl Polynomial {
         Self { coeffs }
     }
 
-    fn gen<R: Rng>(rng: &mut R, d: RangeInclusive<usize>) -> Self {
-        Self::new(
-            d.map(|_| ClampedF32::new(rng.gen_range(-5.0..=5.0)))
-                .collect(),
-        )
-    }
-
     pub fn eval(&self, x: f32) -> f32 {
         self.coeffs
             .iter()
             .enumerate()
             .map(|(d, coeff)| coeff.0 .0 * x.powi(d as i32))
             .sum()
+    }
+}
+
+impl Gen for Polynomial {
+    fn gen<R: Rng>(rng: &mut R) -> Self {
+        Self::new(
+            (0..=3)
+                .map(|_| ClampedF32::new(rng.gen_range(-5.0..=5.0)))
+                .collect(),
+        )
     }
 }
 

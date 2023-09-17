@@ -1,6 +1,6 @@
 use std::{collections::BinaryHeap, error::Error, fs::File};
 
-use genetic::{Crossover, Mutate};
+use genetic::{Crossover, Gen, Mutate};
 use ordered_float::OrderedFloat;
 use rand::prelude::*;
 use rayon::prelude::*;
