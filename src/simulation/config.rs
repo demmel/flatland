@@ -12,10 +12,6 @@ pub struct Config {
     pub air_to_water_saturation_threshold: ClampedF32<0, 1, 1>,
     pub saturation_diffusion_rate: ClampedF32<0, 1, 1>,
     pub water_to_air_saturation_threshold: ClampedF32<0, 1, 1>,
-    pub neighbor_attraction_weights: [ClampedF32<-1, 1, 1>; 8],
-    pub neighbor_density_weights: [ClampedF32<-1, 1, 1>; 8],
-    pub attraction_score_weight: ClampedF32<0, 1, 1>,
-    pub density_score_weight: ClampedF32<0, 1, 1>,
 }
 
 impl Default for Config {
@@ -47,28 +43,6 @@ impl Default for Config {
             air_to_water_saturation_threshold: ClampedF32::new(0.9),
             saturation_diffusion_rate: ClampedF32::new(0.01),
             water_to_air_saturation_threshold: ClampedF32::new(0.5),
-            neighbor_attraction_weights: [
-                ClampedF32::new(1.0 / 16.0),
-                ClampedF32::new(3.0 / 16.0),
-                ClampedF32::new(1.0 / 16.0),
-                ClampedF32::new(3.0 / 16.0),
-                ClampedF32::new(3.0 / 16.0),
-                ClampedF32::new(1.0 / 16.0),
-                ClampedF32::new(3.0 / 16.0),
-                ClampedF32::new(1.0 / 16.0),
-            ],
-            neighbor_density_weights: [
-                ClampedF32::new(-0.25),
-                ClampedF32::new(-0.5),
-                ClampedF32::new(-0.25),
-                ClampedF32::new(0.0),
-                ClampedF32::new(0.0),
-                ClampedF32::new(0.25),
-                ClampedF32::new(0.5),
-                ClampedF32::new(0.25),
-            ],
-            attraction_score_weight: ClampedF32::new(0.1),
-            density_score_weight: ClampedF32::new(1.0),
         }
     }
 }
