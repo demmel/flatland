@@ -11,6 +11,19 @@ pub trait GridLike<T> {
     {
         GridWindows::new(self, size)
     }
+
+    fn window_at(&self, size: usize, (x, y): (usize, usize)) -> GridWindow<'_, T, Self>
+    where
+        Self: Sized,
+    {
+        GridWindow {
+            grid: self,
+            x,
+            y,
+            size,
+            _p: PhantomData,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -103,17 +116,9 @@ impl<'a, T, G: GridLike<T>> Iterator for GridWindows<'a, T, G> {
     type Item = GridWindow<'a, T, G>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some((x, y)) = self.enumerator.next() {
-            Some(GridWindow {
-                grid: self.grid,
-                x,
-                y,
-                size: self.size,
-                _p: PhantomData,
-            })
-        } else {
-            None
-        }
+        self.enumerator
+            .next()
+            .map(|xy| self.grid.window_at(self.size, xy))
     }
 }
 

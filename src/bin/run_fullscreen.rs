@@ -14,7 +14,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .map_err(|_| "Couldn't fine config file")
         .and_then(|f| serde_json::from_reader(f).map_err(|_| "Malformed config"))
         .unwrap_or(Config::default());
-    let mut state: State = State::gen(config, 320, 180);
+    let mut state: State = State::gen(config, 80, 45);
     let mut running: bool = false;
 
     let window = create_window(

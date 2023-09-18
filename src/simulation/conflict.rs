@@ -2,11 +2,10 @@ use ordered_float::OrderedFloat;
 
 use crate::grid::{Grid, GridEnumerator, GridLike};
 
-use super::{config::Config, score::WINDOW_SIZE, PairwiseTileScorer};
+use super::ForceField;
 
 pub fn reduce_potential_moves(
-    scorer: &mut PairwiseTileScorer,
-    config: &Config,
+    forces: &ForceField,
     potential_moves: &mut Grid<PotentialMoves>,
 ) -> (Grid<(isize, isize)>, usize) {
     let mut iters = 0;
@@ -34,8 +33,7 @@ pub fn reduce_potential_moves(
                 }
             }
         }
-        let mut found_conflicts =
-            resolve_conflicts(scorer, config, &mut conflicts, potential_moves);
+        let mut found_conflicts = resolve_conflicts(forces, &mut conflicts, potential_moves);
         for (x, y) in GridEnumerator::new(potential_moves) {
             let p = potential_moves.get_mut(x as isize, y as isize).unwrap();
             if p.current().is_none() {
@@ -67,8 +65,7 @@ pub fn reduce_potential_moves(
 }
 
 pub fn resolve_conflicts(
-    scorer: &mut PairwiseTileScorer,
-    config: &Config,
+    forces: &ForceField,
     conflicts: &mut Grid<MoveConflict>,
     potential_moves: &mut Grid<PotentialMoves>,
 ) -> bool {
@@ -81,9 +78,7 @@ pub fn resolve_conflicts(
             let (winner_index, _) = c
                 .iter()
                 .enumerate()
-                .max_by_key(|(_, (cx, cy))| {
-                    OrderedFloat(scorer.position_score(config, *cx, *cy, x as isize, y as isize))
-                })
+                .max_by_key(|(_, (cx, cy))| OrderedFloat(forces.get(*cx, *cy).unwrap().norm()))
                 .unwrap();
 
             c.swap_remove(winner_index);
@@ -99,7 +94,7 @@ pub fn resolve_conflicts(
 
 #[derive(Debug, Clone)]
 pub struct MoveConflict {
-    candidates: [Option<(isize, isize)>; (WINDOW_SIZE * WINDOW_SIZE) as usize],
+    candidates: [Option<(isize, isize)>; (3 * 3) as usize],
     len: usize,
     locked: bool,
 }
@@ -107,7 +102,7 @@ pub struct MoveConflict {
 impl MoveConflict {
     fn new() -> Self {
         Self {
-            candidates: [None; (WINDOW_SIZE * WINDOW_SIZE) as usize],
+            candidates: [None; (3 * 3) as usize],
             len: 0,
             locked: false,
         }

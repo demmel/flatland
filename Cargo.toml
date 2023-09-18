@@ -20,6 +20,7 @@ show-image = { version = "0.13.1", features = ["image"] }
 statistical = "1.0.0"
 step_ranker = { path = "../step_ranker" }
 genetic = { path = "../genetic", features = ["derive"] }
+nalgebra = "0.32.3"
 
 [profile.release]
 debug = true

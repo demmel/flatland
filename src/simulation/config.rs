@@ -58,16 +58,16 @@ impl Default for Config {
                 ClampedF32::new(1.0 / 16.0),
             ],
             neighbor_density_weights: [
-                ClampedF32::new(0.0),
+                ClampedF32::new(-0.25),
                 ClampedF32::new(-0.5),
+                ClampedF32::new(-0.25),
                 ClampedF32::new(0.0),
                 ClampedF32::new(0.0),
-                ClampedF32::new(0.0),
-                ClampedF32::new(0.0),
+                ClampedF32::new(0.25),
                 ClampedF32::new(0.5),
-                ClampedF32::new(0.0),
+                ClampedF32::new(0.25),
             ],
-            attraction_score_weight: ClampedF32::new(1.0),
+            attraction_score_weight: ClampedF32::new(0.1),
             density_score_weight: ClampedF32::new(1.0),
         }
     }

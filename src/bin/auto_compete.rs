@@ -398,9 +398,5 @@ fn score_state(old_state: &State, state: &State) -> f32 {
 
     let conflict_score = 1.0 / state.conflict_iters.max(1) as f32;
 
-    3.0 * saturation_score
-        + 2.0 * position_score
-        + distributsion_score
-        + pattern_score
-        + conflict_score
+    2.0 * position_score + pattern_score + conflict_score
 }
