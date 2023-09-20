@@ -3,9 +3,9 @@ pub mod conflict;
 pub mod forcefield;
 
 use enum_ordinalize::Ordinalize;
-use image::{Rgb, RgbImage};
+use image::{GenericImage, Pixel, Rgb, RgbImage};
 use ordered_float::OrderedFloat;
-use palette::{Mix, Srgb};
+use palette::{convert::IntoColorUnclamped, FromColor, IntoColor, LinSrgb, Mix, Srgb};
 use rand::prelude::*;
 
 use crate::grid::{Grid, GridEnumerator, GridLike};
@@ -55,8 +55,32 @@ impl State {
     }
 
     pub fn to_image(&self) -> RgbImage {
-        // return self.forces.to_image();
+        let f = self.forces.force_image();
+        let pr = self.forces.pressure_image();
+        let e = self.element_image();
 
+        let mut img = RgbImage::new(self.elements.width() as u32, self.elements.height() as u32);
+
+        fn image_to_palette(p: &Rgb<u8>) -> LinSrgb<f32> {
+            let [r, g, b] = p.0;
+            let color = Srgb::new(r, g, b).into_format::<f32>().into_linear();
+            color
+        }
+
+        for (x, y, p) in img.enumerate_pixels_mut() {
+            let mut color = image_to_palette(e.get_pixel(x, y));
+            // let mut color = image_to_palette(pr.get_pixel(x, y));
+            // let mut color = image_to_palette(f.get_pixel(x, y));
+            // color = color.mix(image_to_palette(pr.get_pixel(x, y)), 0.75);
+            // color = color.mix(image_to_palette(f.get_pixel(x, y)), 0.5);
+            let color = Srgb::from_color(color).into_format::<u8>();
+            *p = Rgb([color.red, color.green, color.blue])
+        }
+
+        img
+    }
+
+    fn element_image(&self) -> RgbImage {
         let mut img = RgbImage::new(self.elements.width() as u32, self.elements.height() as u32);
 
         for (x, y, p) in img.enumerate_pixels_mut() {
@@ -86,7 +110,7 @@ impl State {
         // self.forces.update(&self.elements, &self.config, &mut rng);
 
         self.forces.init(&self.config, &self.elements);
-        for _ in 0..5 {
+        for _ in 0..10 {
             self.forces.update(&self.elements, &self.config, &mut rng);
         }
         self.potential_moves = self.forces.potential_moves();

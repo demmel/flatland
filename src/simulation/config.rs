@@ -20,7 +20,7 @@ impl Default for Config {
             air: ElementConfig {
                 adhesion: Polynomial::new(vec![ClampedF32::new(0.1), ClampedF32::new(0.05)]),
                 cohesion: Polynomial::new(vec![ClampedF32::new(0.1), ClampedF32::new(0.4)]),
-                density: Polynomial::new(vec![ClampedF32::new(0.1), ClampedF32::new(-0.1)]),
+                density: Polynomial::new(vec![ClampedF32::new(0.1), ClampedF32::new(-0.99)]),
             },
             soil: ElementConfig {
                 adhesion: Polynomial::new(vec![

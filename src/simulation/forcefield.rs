@@ -31,12 +31,14 @@ impl ForceField {
         for (x, y) in GridEnumerator::new(elements) {
             let t = elements.get(x as isize, y as isize).unwrap();
             let mut force = Vector2::y();
-            for i in -2..=2 {
-                let edges = [(i, -2), (-2, i), (i, 2), (2, i)];
-                for (dx, dy) in edges {
-                    let d = Vector2::new(dx as f32, dy as f32).normalize();
-                    if let Some(ot) = elements.get(x as isize + dx, y as isize + dy) {
-                        force += t.attractive_force(ot, config) * d;
+            for d in 1..=2 {
+                for i in -d..d {
+                    let edges = [(i, -d), (d, i), (d - i, d), (-d, d - i)];
+                    for (dx, dy) in edges {
+                        let d = Vector2::new(dx as f32, dy as f32).normalize();
+                        if let Some(ot) = elements.get(x as isize + dx, y as isize + dy) {
+                            force += t.attractive_force(ot, config) * d;
+                        }
                     }
                 }
             }
@@ -88,12 +90,12 @@ impl ForceField {
                 for of2 in other_forces_on_xy.iter().skip(i + 1) {
                     let opposition = of1.dot(of2);
                     if opposition < 0.0 {
-                        pressure += 0.9 * (-opposition).sqrt();
+                        pressure += (-opposition).sqrt();
                     }
                 }
             }
 
-            // pressure /= total_norm;
+            pressure /= total_norm.max(1.0);
 
             // println!("{pressure}");
 
@@ -104,11 +106,13 @@ impl ForceField {
         for (x, y) in GridEnumerator::new(self.forces.read()) {
             let (x, y) = (x as isize, y as isize);
             let mut f = *self.forces.read().get(x, y).unwrap();
+            // println!("Initial F: {f}");
 
             let other_forces_on_xy = other_force_on.get(x, y).unwrap();
             for of in other_forces_on_xy.iter() {
-                f += 0.5 * of;
+                f += of;
             }
+            // println!("After other forces: {f}");
 
             let (dx, dy, &op) = self
                 .pressures
@@ -119,13 +123,13 @@ impl ForceField {
                 .unwrap();
             let p = *self.pressures.read().get(x, y).unwrap();
 
-            f += 0.5
-                * (p - op)
+            f += (p - op)
                 * Vector2::new(dx as f32, dy as f32)
                     .try_normalize(f32::EPSILON)
                     .unwrap_or(Vector2::zeros());
+            // println!("After pressure: {f}");
 
-            *self.forces.write().get_mut(x as isize, y as isize).unwrap() = f;
+            *self.forces.write().get_mut(x as isize, y as isize).unwrap() = 0.5 * f;
         }
         self.forces.flip();
     }
@@ -171,7 +175,7 @@ impl ForceField {
         )
     }
 
-    pub fn to_image(&self) -> RgbImage {
+    pub fn force_image(&self) -> RgbImage {
         let mut img = RgbImage::new(
             self.forces.read().width() as u32,
             self.forces.read().height() as u32,
@@ -182,15 +186,6 @@ impl ForceField {
             .read()
             .iter()
             .map(|f| OrderedFloat(f.norm()))
-            .max()
-            .unwrap()
-            .0;
-
-        let max_pressure = self
-            .pressures
-            .read()
-            .iter()
-            .map(|p| OrderedFloat(*p))
             .max()
             .unwrap()
             .0;
@@ -219,8 +214,30 @@ impl ForceField {
 
             let p_color = Srgb::from_color(hsv).into_format::<u8>();
 
-            // let pr = *self.pressures.read().get(x as isize, y as isize).unwrap() / max_pressure;
-            // let p_color = Srgb::new(pr, pr, pr).into_format::<u8>();
+            *p = Rgb([p_color.red, p_color.green, p_color.blue]);
+        }
+
+        img
+    }
+
+    pub fn pressure_image(&self) -> RgbImage {
+        let mut img = RgbImage::new(
+            self.forces.read().width() as u32,
+            self.forces.read().height() as u32,
+        );
+
+        let max_pressure = self
+            .pressures
+            .read()
+            .iter()
+            .map(|p| OrderedFloat(*p))
+            .max()
+            .unwrap()
+            .0;
+
+        for (x, y, p) in img.enumerate_pixels_mut() {
+            let pr = *self.pressures.read().get(x as isize, y as isize).unwrap() / max_pressure;
+            let p_color = Srgb::new(pr, pr, pr).into_format::<u8>();
             *p = Rgb([p_color.red, p_color.green, p_color.blue]);
         }
 
@@ -230,5 +247,10 @@ impl ForceField {
 
 fn project_incoming_force_onto_cell(dx: isize, dy: isize, of: &Vector2<f32>) -> Vector2<f32> {
     let d = -Vector2::new(dx as f32, dy as f32).normalize();
-    (of).dot(&d) * d
+    let scale = (of).dot(&d);
+    if scale < 0.0 {
+        scale * d
+    } else {
+        Vector2::zeros()
+    }
 }
