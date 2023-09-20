@@ -86,7 +86,7 @@ impl State {
         // self.forces.update(&self.elements, &self.config, &mut rng);
 
         self.forces.init(&self.config, &self.elements);
-        for _ in 0..10 {
+        for _ in 0..5 {
             self.forces.update(&self.elements, &self.config, &mut rng);
         }
         self.potential_moves = self.forces.potential_moves();

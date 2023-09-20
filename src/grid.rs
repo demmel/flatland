@@ -94,6 +94,66 @@ impl<T> GridLike<T> for Grid<T> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct ArrayGrid<T, const W: usize, const H: usize> {
+    cells: [[T; W]; H],
+}
+
+impl<T, const W: usize, const H: usize> ArrayGrid<T, W, H> {
+    pub fn new(init: impl Fn(usize, usize) -> T + Copy) -> Self {
+        Self {
+            cells: std::array::from_fn(|y| std::array::from_fn(|x| init(x, y))),
+        }
+    }
+
+    pub fn from_cells(cells: [[T; W]; H]) -> Self {
+        Self { cells }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &T> {
+        self.cells.iter().flat_map(|ys| ys.iter())
+    }
+
+    pub fn fill(&mut self, t: T)
+    where
+        T: Clone,
+    {
+        for r in self.cells.iter_mut() {
+            r.fill(t.clone());
+        }
+    }
+
+    pub fn enumerate(&self) -> impl Iterator<Item = (usize, usize, &T)> {
+        (0..self.height()).flat_map(move |y| {
+            (0..self.width()).map(move |x| (x, y, self.get(x as isize, y as isize).unwrap()))
+        })
+    }
+
+    pub fn get_mut(&mut self, x: isize, y: isize) -> Option<&mut T> {
+        if x < 0 || y < 0 || x >= W as isize || y >= H as isize {
+            return None;
+        }
+        Some(&mut self.cells[y as usize][x as usize])
+    }
+}
+
+impl<T, const W: usize, const H: usize> GridLike<T> for ArrayGrid<T, W, H> {
+    fn get(&self, x: isize, y: isize) -> Option<&T> {
+        if x < 0 || y < 0 || x >= W as isize || y >= H as isize {
+            return None;
+        }
+        Some(&self.cells[y as usize][x as usize])
+    }
+
+    fn height(&self) -> usize {
+        H
+    }
+
+    fn width(&self) -> usize {
+        W
+    }
+}
+
 pub struct GridWindows<'a, T, G: GridLike<T>> {
     grid: &'a G,
     enumerator: GridEnumerator,
@@ -157,6 +217,19 @@ impl<'a, T, G: GridLike<T>> GridWindow<'a, T, G> {
                 })
             })
             .filter_map(|(x, y)| self.get(x, y))
+    }
+
+    pub fn enumerate(&self) -> impl Iterator<Item = (isize, isize, &T)> {
+        (0..self.height())
+            .flat_map(move |y| {
+                (0..self.width()).map(move |x| {
+                    (
+                        x as isize - (self.width() / 2) as isize,
+                        y as isize - (self.height() / 2) as isize,
+                    )
+                })
+            })
+            .filter_map(|(x, y)| self.get(x, y).map(|t| (x, y, t)))
     }
 }
 

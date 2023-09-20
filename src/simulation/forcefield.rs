@@ -7,26 +7,30 @@ use palette::{FromColor, Srgb};
 use rand::Rng;
 
 use crate::{
-    grid::{Grid, GridEnumerator, GridLike},
+    grid::{ArrayGrid, Grid, GridEnumerator, GridLike},
     pageflip::PageFlip,
 };
 
 use super::{config::Config, conflict::PotentialMoves, Tile};
 
 #[derive(Debug, Clone)]
-pub struct ForceField(PageFlip<Grid<Vector2<f32>>>);
+pub struct ForceField {
+    forces: PageFlip<Grid<Vector2<f32>>>,
+    pressures: PageFlip<Grid<f32>>,
+}
 
 impl ForceField {
     pub fn new(width: usize, height: usize) -> Self {
-        Self(PageFlip::new(|| {
-            Grid::new(width, height, |_, _| Vector2::new(0.0, 0.0))
-        }))
+        Self {
+            forces: PageFlip::new(|| Grid::new(width, height, |_, _| Vector2::new(0.0, 0.0))),
+            pressures: PageFlip::new(|| Grid::new(width, height, |_, _| 0.0)),
+        }
     }
 
     pub fn init(&mut self, config: &Config, elements: &Grid<Tile>) {
         for (x, y) in GridEnumerator::new(elements) {
             let t = elements.get(x as isize, y as isize).unwrap();
-            let mut force = 9.0f32 * Vector2::y();
+            let mut force = Vector2::y();
             for i in -2..=2 {
                 let edges = [(i, -2), (-2, i), (i, 2), (2, i)];
                 for (dx, dy) in edges {
@@ -36,106 +40,145 @@ impl ForceField {
                     }
                 }
             }
-            *self.0.write().get_mut(x as isize, y as isize).unwrap() = force;
+            *self.forces.write().get_mut(x as isize, y as isize).unwrap() = force;
         }
-        self.0.flip();
+        self.forces.flip();
     }
 
     pub fn update<R: Rng>(&mut self, elements: &Grid<Tile>, config: &Config, rng: &mut R) {
-        for (x, y) in GridEnumerator::new(self.0.read()) {
-            let t = elements.get(x as isize, y as isize).unwrap();
-            let mut f = *self.0.read().get(x as isize, y as isize).unwrap();
-            let mut max_x = OrderedFloat(f.x);
-            let mut max_y = OrderedFloat(f.y);
-            let mut min_x = OrderedFloat(f.x);
-            let mut min_y = OrderedFloat(f.y);
-            for (dx, dy) in (-1..=1).flat_map(|y| (-1..=1).map(move |x| (x, y))) {
-                if dx != 0 || dy != 0 {
-                    if let Some(of) = self.0.read().get(x as isize + dx, y as isize + dy) {
-                        let o = elements.get(x as isize + dx, y as isize + dy).unwrap();
-                        let d = -Vector2::new(dx as f32, dy as f32).normalize();
-                        let scale = 0.25 * (of * o.density(config) / t.density(config)).dot(&d);
-                        if scale > 0.0 {
-                            let scaled_d = d * scale;
-                            f += scaled_d;
-                            max_x = max_x.max(OrderedFloat(scaled_d.x));
-                            max_y = max_y.max(OrderedFloat(scaled_d.y));
-                            min_x = min_x.min(OrderedFloat(scaled_d.x));
-                            min_y = min_y.min(OrderedFloat(scaled_d.y));
-                        }
+        let other_force_on = Grid::new(
+            self.forces.read().width(),
+            self.forces.read().height(),
+            |x, y| {
+                let (x, y) = (x as isize, y as isize);
+                let get_other_force_on_xy = |x, y, dx, dy| {
+                    let t = elements.get(x, y).unwrap();
+                    let f = *self.forces.read().get(x, y).unwrap();
+                    let (ox, oy) = (x + dx, y + dy);
+                    self.forces
+                        .read()
+                        .get(ox, oy)
+                        .map(|of| {
+                            let o = elements.get(ox, oy).unwrap();
+                            of * o.density(config) / t.density(config)
+                        })
+                        .unwrap_or_else(|| -f)
+                };
+                ArrayGrid::<Vector2<f32>, 3, 3>::new(|dx, dy| {
+                    let (dx, dy) = (dx as isize - 1, dy as isize - 1);
+                    if dx != 0 || dy != 0 {
+                        let of = get_other_force_on_xy(x, y, dx, dy);
+                        let proj_of = project_incoming_force_onto_cell(dx, dy, &of);
+                        proj_of
+                    } else {
+                        Vector2::zeros()
+                    }
+                })
+            },
+        );
+
+        for (x, y) in GridEnumerator::new(self.forces.read()) {
+            let (x, y) = (x as isize, y as isize);
+            let mut pressure = 0.0;
+            let mut total_norm = 0.0;
+
+            let other_forces_on_xy = other_force_on.get(x, y).unwrap();
+            for (i, of1) in other_forces_on_xy.iter().enumerate() {
+                total_norm += of1.norm();
+                for of2 in other_forces_on_xy.iter().skip(i + 1) {
+                    let opposition = of1.dot(of2);
+                    if opposition < 0.0 {
+                        pressure += 0.9 * (-opposition).sqrt();
                     }
                 }
             }
 
-            f.x = f.x.clamp(min_x.0, max_x.0);
-            f.y = f.y.clamp(min_y.0, max_y.0);
+            // pressure /= total_norm;
 
-            let (dx, dy) = (-1..=1)
-                .flat_map(|y| (-1..=1).map(move |x| (x, y)))
-                .max_by_key(|(dx, dy)| {
-                    OrderedFloat(
-                        f.dot(
-                            &Vector2::new(*dx as f32, *dy as f32)
-                                .try_normalize(f32::EPSILON)
-                                .unwrap_or(Vector2::zeros()),
-                        ),
-                    )
-                })
-                .unwrap();
+            // println!("{pressure}");
 
-            if elements.get(x as isize + dx, y as isize + dy).is_none() {
-                f = Rotation2::new(
-                    rng.gen_range(-std::f32::consts::FRAC_PI_2..=std::f32::consts::FRAC_PI_2),
-                ) * -f;
+            *self.pressures.write().get_mut(x, y).unwrap() = pressure;
+        }
+        self.pressures.flip();
+
+        for (x, y) in GridEnumerator::new(self.forces.read()) {
+            let (x, y) = (x as isize, y as isize);
+            let mut f = *self.forces.read().get(x, y).unwrap();
+
+            let other_forces_on_xy = other_force_on.get(x, y).unwrap();
+            for of in other_forces_on_xy.iter() {
+                f += 0.5 * of;
             }
 
-            *self.0.write().get_mut(x as isize, y as isize).unwrap() = f;
+            let (dx, dy, &op) = self
+                .pressures
+                .read()
+                .window_at(3, (x as usize, y as usize))
+                .enumerate()
+                .min_by_key(|(_dx, _dy, op)| OrderedFloat(**op))
+                .unwrap();
+            let p = *self.pressures.read().get(x, y).unwrap();
+
+            f += 0.5
+                * (p - op)
+                * Vector2::new(dx as f32, dy as f32)
+                    .try_normalize(f32::EPSILON)
+                    .unwrap_or(Vector2::zeros());
+
+            *self.forces.write().get_mut(x as isize, y as isize).unwrap() = f;
         }
-        self.0.flip();
+        self.forces.flip();
     }
 
     pub fn get(&self, x: isize, y: isize) -> Option<&Vector2<f32>> {
-        self.0.read().get(x, y)
+        self.forces.read().get(x, y)
     }
 
     pub fn potential_moves(&self) -> Grid<PotentialMoves> {
-        Grid::new(self.0.read().width(), self.0.read().height(), |x, y| {
-            let mut moves: Vec<_> = (-1..=1)
-                .flat_map(|dy| (-1..=1).map(move |dx| (dx, dy)))
-                .filter(|(dx, dy)| {
-                    let x = x as isize + dx;
-                    let y = y as isize + dy;
-                    !(x < 0
-                        || y < 0
-                        || x as usize >= self.0.read().width()
-                        || y as usize >= self.0.read().height())
-                })
-                .collect();
+        Grid::new(
+            self.forces.read().width(),
+            self.forces.read().height(),
+            |x, y| {
+                let mut moves: Vec<_> = (-1..=1)
+                    .flat_map(|dy| (-1..=1).map(move |dx| (dx, dy)))
+                    .filter(|(dx, dy)| {
+                        let x = x as isize + dx;
+                        let y = y as isize + dy;
+                        !(x < 0
+                            || y < 0
+                            || x as usize >= self.forces.read().width()
+                            || y as usize >= self.forces.read().height())
+                    })
+                    .collect();
 
-            let f = self.0.read().get(x as isize, y as isize).unwrap();
-            moves.sort_unstable_by_key(|(dx, dy)| {
-                Reverse(OrderedFloat(
-                    Vector2::new(*dx as f32, *dy as f32)
-                        .try_normalize(f32::EPSILON)
-                        .unwrap_or(Vector2::zeros())
-                        .dot(f),
-                ))
-            });
+                let f = self.forces.read().get(x as isize, y as isize).unwrap();
+                moves.sort_unstable_by_key(|(dx, dy)| {
+                    Reverse(OrderedFloat(
+                        Vector2::new(*dx as f32, *dy as f32)
+                            .try_normalize(f32::EPSILON)
+                            .unwrap_or(Vector2::zeros())
+                            .dot(f),
+                    ))
+                });
 
-            PotentialMoves::new(
-                moves
-                    .into_iter()
-                    .map(|(dx, dy)| (x as isize + dx, y as isize + dy))
-                    .collect(),
-            )
-        })
+                PotentialMoves::new(
+                    moves
+                        .into_iter()
+                        .map(|(dx, dy)| (x as isize + dx, y as isize + dy))
+                        .collect(),
+                )
+            },
+        )
     }
 
-    fn to_image(&self) -> RgbImage {
-        let mut img = RgbImage::new(self.0.read().width() as u32, self.0.read().height() as u32);
+    pub fn to_image(&self) -> RgbImage {
+        let mut img = RgbImage::new(
+            self.forces.read().width() as u32,
+            self.forces.read().height() as u32,
+        );
 
         let max_force = self
-            .0
+            .forces
             .read()
             .iter()
             .map(|f| OrderedFloat(f.norm()))
@@ -143,8 +186,17 @@ impl ForceField {
             .unwrap()
             .0;
 
+        let max_pressure = self
+            .pressures
+            .read()
+            .iter()
+            .map(|p| OrderedFloat(*p))
+            .max()
+            .unwrap()
+            .0;
+
         for (x, y, p) in img.enumerate_pixels_mut() {
-            let f = self.0.read().get(x as isize, y as isize).unwrap();
+            let f = self.forces.read().get(x as isize, y as isize).unwrap();
             let up = -Vector2::y(); // Up direction
 
             // Compute the smallest angle between vectors
@@ -161,14 +213,22 @@ impl ForceField {
             };
 
             let hue = final_angle_rad * 180.0 / std::f32::consts::PI;
-            let brightness = f.norm() / max_force;
+            let brightness = f.norm().log10() / max_force.log10();
 
             let hsv = palette::Hsv::new_srgb(hue, 1.0, brightness);
 
             let p_color = Srgb::from_color(hsv).into_format::<u8>();
-            *p = Rgb([p_color.red, p_color.green, p_color.blue])
+
+            // let pr = *self.pressures.read().get(x as isize, y as isize).unwrap() / max_pressure;
+            // let p_color = Srgb::new(pr, pr, pr).into_format::<u8>();
+            *p = Rgb([p_color.red, p_color.green, p_color.blue]);
         }
 
         img
     }
+}
+
+fn project_incoming_force_onto_cell(dx: isize, dy: isize, of: &Vector2<f32>) -> Vector2<f32> {
+    let d = -Vector2::new(dx as f32, dy as f32).normalize();
+    (of).dot(&d) * d
 }
