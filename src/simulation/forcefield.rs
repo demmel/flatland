@@ -1,10 +1,9 @@
 use std::cmp::Reverse;
 
 use image::{Rgb, RgbImage};
-use nalgebra::{Rotation2, Vector2};
+use nalgebra::Vector2;
 use ordered_float::OrderedFloat;
 use palette::{FromColor, Srgb};
-use rand::Rng;
 
 use crate::{
     grid::{ArrayGrid, Grid, GridEnumerator, GridLike},
@@ -29,25 +28,13 @@ impl ForceField {
 
     pub fn init(&mut self, config: &Config, elements: &Grid<Tile>) {
         for (x, y) in GridEnumerator::new(elements) {
-            let t = elements.get(x as isize, y as isize).unwrap();
-            let mut force = Vector2::y();
-            for d in 1..=2 {
-                for i in -d..d {
-                    let edges = [(i, -d), (d, i), (d - i, d), (-d, d - i)];
-                    for (dx, dy) in edges {
-                        let d = Vector2::new(dx as f32, dy as f32).normalize();
-                        if let Some(ot) = elements.get(x as isize + dx, y as isize + dy) {
-                            force += t.attractive_force(ot, config) * d;
-                        }
-                    }
-                }
-            }
-            *self.forces.write().get_mut(x as isize, y as isize).unwrap() = force;
+            *self.forces.write().get_mut(x as isize, y as isize).unwrap() =
+                cumulative_attractive_forces_on_xy(x as isize, y as isize, elements, config);
         }
         self.forces.flip();
     }
 
-    pub fn update<R: Rng>(&mut self, elements: &Grid<Tile>, config: &Config, rng: &mut R) {
+    pub fn update(&mut self, elements: &Grid<Tile>, config: &Config) {
         let other_force_on = Grid::new(
             self.forces.read().width(),
             self.forces.read().height(),
@@ -81,55 +68,19 @@ impl ForceField {
 
         for (x, y) in GridEnumerator::new(self.forces.read()) {
             let (x, y) = (x as isize, y as isize);
-            let mut pressure = 0.0;
-            let mut total_norm = 0.0;
-
-            let other_forces_on_xy = other_force_on.get(x, y).unwrap();
-            for (i, of1) in other_forces_on_xy.iter().enumerate() {
-                total_norm += of1.norm();
-                for of2 in other_forces_on_xy.iter().skip(i + 1) {
-                    let opposition = of1.dot(of2);
-                    if opposition < 0.0 {
-                        pressure += (-opposition).sqrt();
-                    }
-                }
-            }
-
-            pressure /= total_norm.max(1.0);
-
-            // println!("{pressure}");
-
-            *self.pressures.write().get_mut(x, y).unwrap() = pressure;
+            *self.pressures.write().get_mut(x, y).unwrap() = pressure_on_xy(x, y, &other_force_on);
         }
         self.pressures.flip();
 
         for (x, y) in GridEnumerator::new(self.forces.read()) {
             let (x, y) = (x as isize, y as isize);
-            let mut f = *self.forces.read().get(x, y).unwrap();
-            // println!("Initial F: {f}");
-
-            let other_forces_on_xy = other_force_on.get(x, y).unwrap();
-            for of in other_forces_on_xy.iter() {
-                f += of;
-            }
-            // println!("After other forces: {f}");
-
-            let (dx, dy, &op) = self
-                .pressures
-                .read()
-                .window_at(3, (x as usize, y as usize))
-                .enumerate()
-                .min_by_key(|(_dx, _dy, op)| OrderedFloat(**op))
-                .unwrap();
-            let p = *self.pressures.read().get(x, y).unwrap();
-
-            f += (p - op)
-                * Vector2::new(dx as f32, dy as f32)
-                    .try_normalize(f32::EPSILON)
-                    .unwrap_or(Vector2::zeros());
-            // println!("After pressure: {f}");
-
-            *self.forces.write().get_mut(x as isize, y as isize).unwrap() = 0.5 * f;
+            *self.forces.write().get_mut(x as isize, y as isize).unwrap() = new_force_for_xy(
+                x,
+                y,
+                self.forces.read(),
+                self.pressures.read(),
+                &other_force_on,
+            );
         }
         self.forces.flip();
     }
@@ -243,6 +194,88 @@ impl ForceField {
 
         img
     }
+}
+
+fn new_force_for_xy(
+    x: isize,
+    y: isize,
+    forces: &Grid<Vector2<f32>>,
+    pressures: &Grid<f32>,
+    other_force_on: &Grid<ArrayGrid<Vector2<f32>, 3, 3>>,
+) -> Vector2<f32> {
+    let mut f = *forces.get(x, y).unwrap();
+
+    let other_forces_on_xy = other_force_on.get(x, y).unwrap();
+    for of in other_forces_on_xy.iter() {
+        f += of;
+    }
+
+    let (dx, dy, &op) = pressures
+        .window_at(3, (x as usize, y as usize))
+        .enumerate()
+        .min_by_key(|(_dx, _dy, op)| OrderedFloat(**op))
+        .unwrap();
+    let p = *pressures.get(x, y).unwrap();
+
+    f += (p - op)
+        * Vector2::new(dx as f32, dy as f32)
+            .try_normalize(f32::EPSILON)
+            .unwrap_or(Vector2::zeros());
+
+    0.5 * f
+}
+
+fn pressure_on_xy(x: isize, y: isize, other_force_on: &Grid<ArrayGrid<Vector2<f32>, 3, 3>>) -> f32 {
+    let mut pressure = 0.0;
+    let mut total_norm = 0.0;
+
+    let other_forces_on_xy = other_force_on.get(x, y).unwrap();
+    for (i, of1) in other_forces_on_xy.iter().enumerate() {
+        total_norm += of1.norm();
+        for of2 in other_forces_on_xy.iter().skip(i + 1) {
+            let opposition = of1.dot(of2);
+            if opposition < 0.0 {
+                pressure += (-opposition).sqrt();
+            }
+        }
+    }
+
+    pressure /= total_norm.max(1.0);
+    pressure
+}
+
+fn cumulative_attractive_forces_on_xy(
+    x: isize,
+    y: isize,
+    elements: &Grid<Tile>,
+    config: &Config,
+) -> Vector2<f32> {
+    let mut force = Vector2::y();
+    for d in 1..=2 {
+        for i in -d..d {
+            let edges = [(i, -d), (d, i), (d - i, d), (-d, d - i)];
+            for (dx, dy) in edges {
+                force += attractive_force_on_xy(x, y, dx, dy, elements, config);
+            }
+        }
+    }
+    force
+}
+
+fn attractive_force_on_xy(
+    x: isize,
+    y: isize,
+    dx: isize,
+    dy: isize,
+    elements: &Grid<Tile>,
+    config: &Config,
+) -> Vector2<f32> {
+    let t = elements.get(x, y).unwrap();
+    let d = Vector2::new(dx as f32, dy as f32).normalize();
+    if let Some(ot) = elements.get(x + dx, y + dy) {
+        return t.attractive_force(ot, config) * d;
+    }
+    Vector2::zeros()
 }
 
 fn project_incoming_force_onto_cell(dx: isize, dy: isize, of: &Vector2<f32>) -> Vector2<f32> {

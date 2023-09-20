@@ -68,11 +68,11 @@ impl State {
         }
 
         for (x, y, p) in img.enumerate_pixels_mut() {
-            let mut color = image_to_palette(e.get_pixel(x, y));
+            // let mut color = image_to_palette(e.get_pixel(x, y));
             // let mut color = image_to_palette(pr.get_pixel(x, y));
-            // let mut color = image_to_palette(f.get_pixel(x, y));
+            let mut color = image_to_palette(f.get_pixel(x, y));
             // color = color.mix(image_to_palette(pr.get_pixel(x, y)), 0.75);
-            // color = color.mix(image_to_palette(f.get_pixel(x, y)), 0.5);
+            // color = color.mix(image_to_palette(f.get_pixel(x, y)), 0.25);
             let color = Srgb::from_color(color).into_format::<u8>();
             *p = Rgb([color.red, color.green, color.blue])
         }
@@ -105,13 +105,11 @@ impl State {
     }
 
     fn update_position(&mut self) {
-        let mut rng = thread_rng();
-
         // self.forces.update(&self.elements, &self.config, &mut rng);
 
         self.forces.init(&self.config, &self.elements);
         for _ in 0..10 {
-            self.forces.update(&self.elements, &self.config, &mut rng);
+            self.forces.update(&self.elements, &self.config);
         }
         self.potential_moves = self.forces.potential_moves();
 
