@@ -35,36 +35,31 @@ impl ForceField {
     }
 
     pub fn update(&mut self, elements: &Grid<Tile>, config: &Config) {
-        let other_force_on = Grid::new(
-            self.forces.read().width(),
-            self.forces.read().height(),
-            |x, y| {
+        let other_force_on = {
+            let forces = self.forces.read();
+            Grid::new(forces.width(), forces.height(), |x, y| {
                 let (x, y) = (x as isize, y as isize);
-                let get_other_force_on_xy = |x, y, dx, dy| {
-                    let t = elements.get(x, y).unwrap();
-                    let f = *self.forces.read().get(x, y).unwrap();
-                    let (ox, oy) = (x + dx, y + dy);
-                    self.forces
-                        .read()
-                        .get(ox, oy)
-                        .map(|of| {
-                            let o = elements.get(ox, oy).unwrap();
-                            of * o.density(config) / t.density(config)
-                        })
-                        .unwrap_or_else(|| -f)
-                };
+                let t = elements.get(x, y).unwrap();
+                let f = *forces.get(x, y).unwrap();
                 ArrayGrid::<Vector2<f32>, 3, 3>::new(|dx, dy| {
                     let (dx, dy) = (dx as isize - 1, dy as isize - 1);
                     if dx != 0 || dy != 0 {
-                        let of = get_other_force_on_xy(x, y, dx, dy);
+                        let (ox, oy) = (x + dx, y + dy);
+                        let of = forces
+                            .get(ox, oy)
+                            .map(|of| {
+                                let o = elements.get(ox, oy).unwrap();
+                                of * o.density(config) / t.density(config)
+                            })
+                            .unwrap_or_else(|| -f);
                         let proj_of = project_incoming_force_onto_cell(dx, dy, &of);
                         proj_of
                     } else {
                         Vector2::zeros()
                     }
                 })
-            },
-        );
+            })
+        };
 
         for (x, y) in GridEnumerator::new(self.forces.read()) {
             let (x, y) = (x as isize, y as isize);
@@ -217,21 +212,24 @@ fn new_force_for_xy(
         .unwrap();
     let p = *pressures.get(x, y).unwrap();
 
-    f += (p - op)
-        * Vector2::new(dx as f32, dy as f32)
-            .try_normalize(f32::EPSILON)
-            .unwrap_or(Vector2::zeros());
+    let p_diff = (p - op);
+    if p_diff > 0.0 {
+        f += p_diff
+            * Vector2::new(dx as f32, dy as f32)
+                .try_normalize(f32::EPSILON)
+                .unwrap_or(Vector2::zeros());
+    }
 
-    0.5 * f
+    println!("{y}: {f}");
+
+    f
 }
 
 fn pressure_on_xy(x: isize, y: isize, other_force_on: &Grid<ArrayGrid<Vector2<f32>, 3, 3>>) -> f32 {
     let mut pressure = 0.0;
-    let mut total_norm = 0.0;
 
     let other_forces_on_xy = other_force_on.get(x, y).unwrap();
     for (i, of1) in other_forces_on_xy.iter().enumerate() {
-        total_norm += of1.norm();
         for of2 in other_forces_on_xy.iter().skip(i + 1) {
             let opposition = of1.dot(of2);
             if opposition < 0.0 {
@@ -240,7 +238,6 @@ fn pressure_on_xy(x: isize, y: isize, other_force_on: &Grid<ArrayGrid<Vector2<f3
         }
     }
 
-    pressure /= total_norm.max(1.0);
     pressure
 }
 
@@ -250,15 +247,15 @@ fn cumulative_attractive_forces_on_xy(
     elements: &Grid<Tile>,
     config: &Config,
 ) -> Vector2<f32> {
-    let mut force = Vector2::y();
-    for d in 1..=2 {
-        for i in -d..d {
-            let edges = [(i, -d), (d, i), (d - i, d), (-d, d - i)];
-            for (dx, dy) in edges {
-                force += attractive_force_on_xy(x, y, dx, dy, elements, config);
-            }
-        }
-    }
+    let mut force = 10.0f32 * Vector2::y();
+    // for d in 1..=2 {
+    //     for i in -d..d {
+    //         let edges = [(i, -d), (d, i), (d - i, d), (-d, d - i)];
+    //         for (dx, dy) in edges {
+    //             force += attractive_force_on_xy(x, y, dx, dy, elements, config);
+    //         }
+    //     }
+    // }
     force
 }
 
